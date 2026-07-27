@@ -1,9 +1,0 @@
-
-.agenttokens-app-container[data-v-bdd892c9] {
-  padding-bottom: 0;
-}
-@media (max-width: 768px) {
-.agenttokens-app-container[data-v-bdd892c9] {
-    padding-bottom: calc(90px + env(safe-area-inset-bottom));
-}
-}

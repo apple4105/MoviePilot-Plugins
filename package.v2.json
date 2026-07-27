@@ -861,21 +861,6 @@
       "v1.0.1": "新增 Agent Tokens 配额管理、供应商优先级切换和用量展示"
     }
   },
-  "AgentTokensPro": {
-    "name": "Agent Tokens Pro",
-    "description": "AgentTokens 增强版：失败自动切换、活跃供应商 UI、自动保存、自动测试、后端三重防护。",
-    "labels": "Agent,AI,系统",
-    "version": "0.0.2",
-    "icon": "agentresourceofficer.png",
-    "author": "jxxghp",
-    "level": 1,
-    "system_version": ">=2.13.2",
-    "release": true,
-    "history": {
-      "v0.0.2": "修复 record_tokens_usage 中 model_call_count 只在成功时递增的 bug，失败请求现在也计入调用次数和 last_used_at",
-      "v0.0.1": "AgentTokens 增强版首发：失败自动切换、活跃供应商 UI、自动保存、自动测试、后端三重防护"
-    }
-  },
   "TraktCleaner": {
     "name": "Trakt 观看清理",
     "description": "根据 Trakt 播放记录，自动清理下载器中已观看的种子。",
