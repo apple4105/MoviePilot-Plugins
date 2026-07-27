@@ -35,6 +35,11 @@ function saveConfig() {
   emit('save', cloneConfig(localConfig.value))
 }
 
+// 自动保存。
+function autoSave() {
+  saveConfig()
+}
+
 onMounted(() => {
   localConfig.value = cloneConfig(props.initialConfig)
   if (localConfig.value.show_sidebar_nav === undefined) {
@@ -60,6 +65,7 @@ onMounted(() => {
       :config="localConfig"
       hide-title
       @save="saveConfig"
+      @auto-save="autoSave"
       @reset-usage="resetUsage"
       @reset-all-usage="resetAllUsage"
     />

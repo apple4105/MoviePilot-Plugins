@@ -16,7 +16,7 @@ import {
 const props = defineProps({
   config: {
     type: Object,
-    default: () => ({ enabled: false, show_sidebar_nav: true, providers: [] }),
+    default: () => ({ enabled: false, show_sidebar_nav: true, max_failures: 3, providers: [] }),
   },
   providerRows: {
     type: Array,
@@ -25,6 +25,10 @@ const props = defineProps({
   summary: {
     type: Object,
     default: () => ({}),
+  },
+  activeProviderId: {
+    type: String,
+    default: null,
   },
   error: {
     type: String,
@@ -44,14 +48,25 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['refresh', 'save', 'reset-usage', 'reset-all-usage'])
+const emit = defineEmits([
+  'refresh',
+  'save',
+  'auto-save',
+  'reset-usage',
+  'reset-all-usage',
+  'query-models',
+  'test-connection',
+  'select-provider',
+])
 
 const activeTab = ref('usage')
 const showEditor = ref(false)
 const editorIndex = ref(-1)
 const editedProvider = ref(createProvider())
+const failedProviderIds = ref([])
+const testFeedback = ref({ type: '', message: '', show: false })
 
-const configValue = computed(() => props.config || { enabled: false, show_sidebar_nav: true, providers: [] })
+const configValue = computed(() => props.config || { enabled: false, show_sidebar_nav: true, max_failures: 3, providers: [] })
 const providers = computed(() => (Array.isArray(configValue.value.providers) ? configValue.value.providers : []))
 const displayProviderRows = computed(() => (
   props.providerRows.length ? props.providerRows : buildProviderRows(providers.value)
@@ -61,6 +76,18 @@ const displaySummary = computed(() => (
 ))
 const limitedUsed = computed(() => Number(displaySummary.value.limited_used ?? displaySummary.value.total_used ?? 0))
 const unlimitedUsed = computed(() => Number(displaySummary.value.unlimited_used || 0))
+
+function showTestFeedback(type, message) {
+  testFeedback.value = { type, message, show: true }
+  setTimeout(() => { testFeedback.value.show = false }, 3000)
+}
+
+// 重置弹窗表单为默认值，关闭弹窗。
+function resetForm() {
+  editedProvider.value = createProvider()
+  editorIndex.value = -1
+  showEditor.value = false
+}
 
 // 打开新增供应商弹窗。
 function addProvider() {
@@ -76,10 +103,11 @@ function editProvider(index) {
   showEditor.value = true
 }
 
-// 将弹窗中的供应商写回配置列表。
+// 将弹窗中的供应商写回配置列表并自动保存。
 function commitProvider() {
   const nextProviders = [...providers.value]
   const normalized = normalizeProvider(editedProvider.value, nextProviders.length + 1)
+  normalized.enabled = true
   if (editorIndex.value >= 0) {
     nextProviders.splice(editorIndex.value, 1, normalized)
   } else {
@@ -87,6 +115,7 @@ function commitProvider() {
   }
   configValue.value.providers = nextProviders
   showEditor.value = false
+  emit('auto-save')
 }
 
 // 从配置列表中移除一个供应商。
@@ -94,14 +123,37 @@ function removeProvider(index) {
   const nextProviders = [...providers.value]
   nextProviders.splice(index, 1)
   configValue.value.providers = nextProviders
+  emit('auto-save')
 }
 
-// 请求重置单个供应商用量。
+// 切换供应商启用状态并自动保存。
+function toggleProvider(index) {
+  const provider = providers.value[index]
+  if (!provider) return
+  provider.enabled = !provider.enabled
+  emit('auto-save')
+}
+
+// 选择供应商为默认并触发连通性测试。
+function selectProvider(providerId) {
+  // 兼容 index 和 providerId 两种入参
+  if (typeof providerId === 'number') {
+    const provider = providers.value[providerId]
+    if (!provider || !provider.id) return
+    emit('select-provider', provider.id)
+  } else {
+    const provider = providers.value.find(p => p.id === providerId)
+    if (!provider) return
+    emit('select-provider', provider.id)
+  }
+}
+
+// 请求重置单个供应商用量并自动保存。
 function resetUsage(providerId, index) {
   emit('reset-usage', providerId, index)
 }
 
-// 请求重置全部供应商用量。
+// 请求重置全部供应商用量并自动保存。
 function resetAllUsage() {
   emit('reset-all-usage')
 }
@@ -120,10 +172,56 @@ function resetAllUsage() {
 
     <VAlert v-if="error" type="error" variant="tonal" class="mb-4">{{ error }}</VAlert>
 
+    <VSlideYTransition>
+      <VAlert
+        v-if="testFeedback.show"
+        :type="testFeedback.type"
+        variant="tonal"
+        density="compact"
+        class="mb-3"
+        closable
+        @click:close="testFeedback.show = false"
+      >
+        {{ testFeedback.message }}
+      </VAlert>
+    </VSlideYTransition>
+
     <VSheet border rounded class="agenttokens-control-panel">
-      <div class="agenttokens-control-panel__switches">
-        <VSwitch v-model="configValue.enabled" color="primary" hide-details inset label="启用插件" />
-        <VSwitch v-model="configValue.show_sidebar_nav" color="primary" hide-details inset label="侧边栏入口" />
+      <!-- 第一行：开关区 -->
+      <div class="agenttokens-control-panel__row">
+        <div class="agenttokens-control-panel__cell agenttokens-control-panel__cell--left">
+          <span class="switch-label">启用插件</span>
+          <VSwitch v-model="configValue.enabled" color="primary" hide-details inset />
+        </div>
+        <div class="agenttokens-control-panel__cell">
+          <span class="switch-label">侧边栏入口</span>
+          <VSwitch v-model="configValue.show_sidebar_nav" color="primary" hide-details inset />
+        </div>
+      </div>
+      <!-- 第二行：配置区 -->
+      <div class="agenttokens-control-panel__row">
+        <div class="agenttokens-control-panel__cell agenttokens-control-panel__cell--left">
+          <div class="config-label">
+            <VIcon icon="mdi-database-outline" color="info" size="small" />
+            <span>限量总额度</span>
+          </div>
+          <span class="agenttokens-control-panel__limit-value">
+            {{ displaySummary.total_limit ? formatTokens(displaySummary.total_limit) : '不限' }}
+          </span>
+        </div>
+        <div class="agenttokens-control-panel__cell">
+          <span class="config-label">失败切换阈值</span>
+          <VTextField
+            v-model.number="configValue.max_failures"
+            type="number"
+            min="1"
+            max="100"
+            density="compact"
+            hide-details
+            variant="outlined"
+            style="max-width: 72px;"
+          />
+        </div>
       </div>
     </VSheet>
 
@@ -148,15 +246,6 @@ function resetAllUsage() {
           </div>
         </div>
       </VSheet>
-      <VSheet border rounded class="agenttokens-stat-card">
-        <VIcon icon="mdi-database-outline" color="info" />
-        <div>
-          <div class="text-caption text-medium-emphasis">限量总额度</div>
-          <div class="agenttokens-stat-card__value">
-            {{ displaySummary.total_limit ? formatTokens(displaySummary.total_limit) : '不限' }}
-          </div>
-        </div>
-      </VSheet>
     </div>
 
     <VSheet border rounded class="agenttokens-content-panel">
@@ -171,7 +260,13 @@ function resetAllUsage() {
 
       <VWindow v-model="activeTab" :touch="false" class="agenttokens-window">
         <VWindowItem value="usage">
-          <ProviderUsageTable :provider-rows="displayProviderRows" @reset="resetUsage" />
+          <ProviderUsageTable
+            :provider-rows="displayProviderRows"
+            :active-provider-id="activeProviderId"
+            :failed-provider-ids="failedProviderIds"
+            @reset="resetUsage"
+            @select="selectProvider"
+          />
         </VWindowItem>
 
         <VWindowItem value="config">
@@ -184,9 +279,13 @@ function resetAllUsage() {
           <ProviderConfigTable
             :providers="providers"
             :provider-rows="displayProviderRows"
+            :active-provider-id="activeProviderId"
+            :failed-provider-ids="failedProviderIds"
             show-credentials
             @edit="editProvider"
             @remove="removeProvider"
+            @select="selectProvider"
+            @toggle="toggleProvider"
           />
         </VWindowItem>
       </VWindow>
@@ -194,9 +293,13 @@ function resetAllUsage() {
 
     <ProviderEditorDialog
       v-model="showEditor"
+      :retain-focus="false"
       :provider="editedProvider"
       :editor-index="editorIndex"
+      @after-leave="resetForm"
       @commit="commitProvider"
+      @query-models="payload => emit('query-models', payload)"
+      @test-connection="payload => emit('test-connection', payload)"
     />
   </div>
 </template>
@@ -214,18 +317,90 @@ function resetAllUsage() {
   align-items: center;
   flex-wrap: nowrap;
   gap: 8px;
+  padding: 16px 0;
+}
+
+@media (max-width: 768px) {
+  .agenttokens-header {
+    padding: 8px 0;
+  }
+  .agenttokens-header h2 {
+    font-size: 1.1rem !important;
+    line-height: 1.3 !important;
+  }
 }
 
 .agenttokens-control-panel {
   display: flex;
-  align-items: center;
-  padding: 12px 16px;
+  flex-direction: column;
+  padding: 0;
+  gap: 0;
 }
 
-.agenttokens-control-panel__switches {
+.agenttokens-control-panel__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
+}
+
+.agenttokens-control-panel__row + .agenttokens-control-panel__row {
+  border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.agenttokens-control-panel__cell {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px 20px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  gap: 8px;
+}
+
+.agenttokens-control-panel__cell--left {
+  border-right: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.switch-label {
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
+}
+
+.config-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+}
+
+.agenttokens-control-panel__limit-value {
+  font-size: 14px;
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .agenttokens-control-panel__cell {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+
+  .switch-label {
+    font-size: 13px;
+  }
+
+  .config-label {
+    font-size: 13px;
+  }
+
+  .agenttokens-control-panel__limit-value {
+    font-size: 13px;
+  }
 }
 
 .agenttokens-overview-grid {
@@ -284,11 +459,40 @@ function resetAllUsage() {
 
 @media (max-width: 1100px) {
   .agenttokens-overview-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .agenttokens-overview-card {
     grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 768px) {
+  .agenttokens-overview-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .agenttokens-overview-card {
+    grid-column: 1 / -1;
+    min-block-size: auto;
+  }
+
+  .agenttokens-stat-card {
+    min-block-size: auto;
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .agenttokens-stat-card__value {
+    font-size: 1.15rem;
+    line-height: 1.3;
+  }
+
+  .agenttokens-stat-card__hint {
+    font-size: 0.72rem;
+    line-height: 1.3;
+    margin-block-start: 1px;
   }
 }
 
@@ -299,14 +503,6 @@ function resetAllUsage() {
 
   .agenttokens-table-actions > :deep(.v-btn) {
     flex: 1 1 10rem;
-  }
-
-  .agenttokens-overview-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .agenttokens-stat-card {
-    min-block-size: 88px;
   }
 }
 </style>

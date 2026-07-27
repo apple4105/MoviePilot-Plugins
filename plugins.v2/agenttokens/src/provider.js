@@ -16,7 +16,7 @@ export function createProvider() {
     base_url: '',
     api_key: '',
     user_agent: '',
-    use_proxy: true,
+    use_proxy: false,
     model: '',
     token_limit: 0,
     used_tokens: 0,
@@ -26,7 +26,7 @@ export function createProvider() {
 
 // 生成深拷贝配置，避免直接修改父组件传入对象。
 export function cloneConfig(config) {
-  return JSON.parse(JSON.stringify(config || { enabled: false, show_sidebar_nav: true, providers: [] }))
+  return JSON.parse(JSON.stringify(config || { enabled: false, show_sidebar_nav: true, max_failures: 3, providers: [] }))
 }
 
 // 格式化 token 数字，保持表格和统计展示可读。
@@ -36,8 +36,14 @@ export function formatTokens(value) {
 }
 
 // 兼容 MoviePilot API 包装器和原始响应两种返回形态。
+// 注意：部分接口（如 test-connection）直接在 Response 根层级返回 success/message，
+// data 字段可能为 null、空对象 {} 或不存在。此时应返回整个 response 对象供调用方直接读取 success/message。
 export function unwrapResponse(response) {
   if (response && Object.prototype.hasOwnProperty.call(response, 'data') && response.success !== undefined) {
+    // data 为 null/undefined/空对象 时，说明接口使用根层级 message 而非 data 包装
+    if (response.data == null || (typeof response.data === 'object' && Object.keys(response.data).length === 0)) {
+      return response
+    }
     return response.data
   }
   return response?.data ?? response
@@ -52,6 +58,7 @@ export function getNextProviderPriority(providers) {
 export function normalizeProvider(provider, fallbackPriority) {
   return {
     ...provider,
+    enabled: provider.enabled !== false,
     use_proxy: provider.use_proxy !== false,
     token_limit: Number(provider.token_limit || 0),
     used_tokens: Number(provider.used_tokens || 0),
@@ -74,6 +81,11 @@ export function buildProviderRow(provider) {
       remaining_tokens: remainingTokens,
       usage_percent: usagePercent,
       exhausted: tokenLimit > 0 && remainingTokens === 0,
+      runs: Number(provider.runs || 0),
+      success_count: Number(provider.success_count || 0),
+      failure_count: Number(provider.failure_count || 0),
+      last_used_at: provider.last_used_at || null,
+      last_error: provider.last_error || null,
     },
   }
 }
@@ -113,4 +125,14 @@ export function buildProviderSummary(rows) {
     limited_remaining: limitedRemaining,
     limited_usage_percent: limitedUsagePercent,
   }
+}
+
+
+// 将模型接口返回值标准化为 VSelect 可用选项。
+export function normalizeModelOptions(value) {
+  const models = Array.isArray(value?.models) ? value.models : (Array.isArray(value) ? value : [])
+  return models
+    .map(item => (typeof item === 'string' ? item : (item?.id || item?.name || item?.model || '')))
+    .filter(Boolean)
+    .map(item => ({ title: item, value: item }))
 }

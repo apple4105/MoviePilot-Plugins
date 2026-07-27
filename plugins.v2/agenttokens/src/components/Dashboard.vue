@@ -27,13 +27,14 @@ const initialDataLoaded = ref(false)
 const lastRefreshedAt = ref(null)
 const widgetRef = ref(null)
 const widgetSize = ref({ inline: 0, block: 0 })
-const status = ref({ providers: [], summary: {} })
+const status = ref({ providers: [], summary: {}, active_provider_id: null })
 let timer = null
 let resizeObserver = null
 
 const attrs = computed(() => props.config?.attrs || {})
 const summary = computed(() => status.value.summary || {})
 const providers = computed(() => status.value.providers || [])
+const activeProviderId = computed(() => status.value.active_provider_id || null)
 // 总调用量用于累计展示，包含限量和不限量模型。
 const totalUsed = computed(() => Number(summary.value.total_used || 0))
 // 限量调用量只用于配额进度，避免不限量模型推高使用率。
@@ -248,10 +249,15 @@ onUnmounted(() => {
           </div>
 
           <div v-if="visibleProviders.length" class="agenttokens-dashboard-list">
-            <div v-for="row in visibleProviders" :key="row.id" class="agenttokens-dashboard-provider">
+            <div
+              v-for="row in visibleProviders"
+              :key="row.id"
+              class="agenttokens-dashboard-provider"
+              :class="{ 'agenttokens-dashboard-provider--active': row.id === activeProviderId }"
+            >
               <VIcon
-                :icon="row.usage?.exhausted ? 'mdi-alert-circle' : 'mdi-check-circle'"
-                :color="row.usage?.exhausted ? 'error' : 'success'"
+                :icon="row.id === activeProviderId ? 'mdi-radiobox-marked' : (row.usage?.exhausted ? 'mdi-alert-circle' : 'mdi-radiobox-blank')"
+                :color="row.id === activeProviderId ? 'primary' : (row.usage?.exhausted ? 'error' : undefined)"
                 size="16"
               />
               <div class="agenttokens-dashboard-provider__main">
@@ -438,6 +444,16 @@ onUnmounted(() => {
 
 .agenttokens-dashboard-provider:hover {
   background: var(--agenttokens-soft-surface);
+}
+
+.agenttokens-dashboard-provider--active {
+  background: rgba(var(--v-theme-primary), 0.06);
+  border-left: 3px solid rgb(var(--v-theme-primary));
+  padding-inline-start: 0;
+}
+
+.agenttokens-dashboard-provider--active:hover {
+  background: rgba(var(--v-theme-primary), 0.1);
 }
 
 .agenttokens-dashboard-provider__main {

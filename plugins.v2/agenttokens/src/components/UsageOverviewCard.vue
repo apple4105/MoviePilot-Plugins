@@ -49,10 +49,12 @@ const progressColor = computed(() => {
       </div>
 
       <div class="usage-overview-card__body">
-        <div class="text-caption text-medium-emphasis">限量模型使用进度</div>
-        <div class="usage-overview-card__headline">
-          {{ formatTokens(totalUsed) }}
-          <span class="text-medium-emphasis">/ {{ totalLimit > 0 ? formatTokens(totalLimit) : '不限' }}</span>
+        <div class="usage-overview-card__title-row">
+          <div class="text-caption text-medium-emphasis">限量模型使用进度</div>
+          <div class="usage-overview-card__headline">
+            {{ formatTokens(totalUsed) }}
+            <span class="text-medium-emphasis">/ {{ totalLimit > 0 ? formatTokens(totalLimit) : '不限' }}</span>
+          </div>
         </div>
         <VProgressLinear
           :model-value="usagePercent"
@@ -62,8 +64,8 @@ const progressColor = computed(() => {
           class="my-4"
         />
         <div class="usage-overview-card__meta">
-          <span>剩余 {{ remainingTokens === null ? '不限' : formatTokens(remainingTokens) }}</span>
           <span>可用 {{ summary.available_count || 0 }} / {{ summary.enabled_count || 0 }}</span>
+          <span>剩余 {{ remainingTokens === null ? '不限' : formatTokens(remainingTokens) }}</span>
         </div>
       </div>
     </div>
@@ -93,12 +95,25 @@ const progressColor = computed(() => {
   font-weight: 700;
 }
 
+.usage-overview-card__title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  width: 100%;
+  gap: 8px;
+}
+
+.usage-overview-card__title-row .text-caption {
+  flex-shrink: 0;
+}
+
 .usage-overview-card__headline {
-  margin-block-start: 4px;
   font-size: 1.5rem;
   font-weight: 700;
   line-height: 1.25;
   overflow-wrap: anywhere;
+  flex-shrink: 0;
+  text-align: right;
 }
 
 .usage-overview-card__meta {
@@ -109,18 +124,62 @@ const progressColor = computed(() => {
   font-size: 0.875rem;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 768px) {
   .usage-overview-card {
-    padding: 16px;
+    padding: 10px 12px;
   }
 
   .usage-overview-card__content {
     grid-template-columns: 1fr;
-    text-align: center;
+    gap: 0;
   }
 
+  /* 移动端隐藏圆环，仅显示横向进度条 */
+  .usage-overview-card__chart {
+    display: none;
+  }
+
+  .usage-overview-card__body {
+    width: 100%;
+  }
+
+  /* 第一行：标题左，数值右 */
+  .usage-overview-card__title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .usage-overview-card__headline {
+    font-size: 1.1rem;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  /* 进度条间距优化 */
+  :deep(.usage-overview-card__body .v-progress-linear) {
+    margin-block: 8px !important;
+    height: 6px !important;
+  }
+
+  /* 底部元信息两端对齐 */
   .usage-overview-card__meta {
-    justify-content: center;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.78rem;
+    gap: 8px;
+    margin-block-start: 2px;
+  }
+
+  .usage-overview-card__meta > span:first-child {
+    text-align: left;
+  }
+
+  .usage-overview-card__meta > span:last-child {
+    text-align: right;
   }
 }
 </style>

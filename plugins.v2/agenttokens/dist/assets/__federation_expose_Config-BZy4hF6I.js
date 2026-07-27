@@ -1,6 +1,6 @@
 import { importShared } from './__federation_fn_import-JrT3xvdd.js';
-import { A as AgentTokensManager } from './AgentTokensManager-ldQ2v6Va.js';
-import { c as cloneConfig } from './_plugin-vue_export-helper-hPgBDeLJ.js';
+import { A as AgentTokensManager } from './AgentTokensManager-i5Xp6yMJ.js';
+import { c as cloneConfig } from './_plugin-vue_export-helper-D-4vgHBx.js';
 
 const {createElementVNode:_createElementVNode,resolveComponent:_resolveComponent,createVNode:_createVNode,withCtx:_withCtx,openBlock:_openBlock,createElementBlock:_createElementBlock} = await importShared('vue');
 
@@ -48,6 +48,11 @@ function saveConfig() {
   emit('save', cloneConfig(localConfig.value));
 }
 
+// 自动保存。
+function autoSave() {
+  saveConfig();
+}
+
 onMounted(() => {
   localConfig.value = cloneConfig(props.initialConfig);
   if (localConfig.value.show_sidebar_nav === undefined) {
@@ -91,6 +96,7 @@ return (_ctx, _cache) => {
       config: localConfig.value,
       "hide-title": "",
       onSave: saveConfig,
+      onAutoSave: autoSave,
       onResetUsage: resetUsage,
       onResetAllUsage: resetAllUsage
     }, null, 8, ["config"])
