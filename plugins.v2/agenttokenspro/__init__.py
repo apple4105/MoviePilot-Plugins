@@ -26,7 +26,7 @@ class AgentTokensPro(_PluginBase):
     plugin_name = "Agent Tokens Pro"
     plugin_desc = "管理多平台免费 Token 配额，按优先级自动切换 Agent LLM 供应商。"
     plugin_icon = "agentresourceofficer.png"
-    plugin_version = "0.0.3"
+    plugin_version = "0.0.4"
     plugin_author = "apple4105"
     author_url = "https://github.com/apple4105"
     plugin_config_prefix = "agenttokenspro_"
@@ -34,6 +34,7 @@ class AgentTokensPro(_PluginBase):
     auth_level = 1
 
     DATA_KEY_USAGE = "usage"
+    DATA_KEY_VENDORS = "vendors"
 
     # 失败自动切换：连续失败次数达到阈值后跳过该供应商。
     DEFAULT_MAX_FAILURES = 3
@@ -119,6 +120,34 @@ class AgentTokensPro(_PluginBase):
                 "methods": ["POST"],
                 "auth": "bear",
                 "summary": "重置全部供应商用量",
+            },
+            {
+                "path": "/vendors",
+                "endpoint": self.get_vendors_api,
+                "methods": ["GET"],
+                "auth": "bear",
+                "summary": "获取厂商列表",
+            },
+            {
+                "path": "/vendors",
+                "endpoint": self.save_vendor_api,
+                "methods": ["POST"],
+                "auth": "bear",
+                "summary": "创建或更新厂商",
+            },
+            {
+                "path": "/vendors/reorder",
+                "endpoint": self.reorder_vendors_api,
+                "methods": ["POST"],
+                "auth": "bear",
+                "summary": "厂商排序",
+            },
+            {
+                "path": "/vendors/delete",
+                "endpoint": self.delete_vendor_api,
+                "methods": ["POST"],
+                "auth": "bear",
+                "summary": "删除厂商",
             },
         ]
 
@@ -702,6 +731,137 @@ class AgentTokensPro(_PluginBase):
         with self._usage_lock:
             self._save_usage({})
         return schemas.Response(success=True, data=self.get_status().data)
+
+    # ---- 厂商管理 API ----
+
+    def _load_vendors(self) -> List[dict]:
+        """
+        读取已记录的厂商列表。
+        """
+        vendors = self.get_data(self.DATA_KEY_VENDORS) or []
+        return vendors if isinstance(vendors, list) else []
+
+    def _save_vendors(self, vendors: List[dict]) -> None:
+        """
+        保存厂商列表数据。
+        """
+        self.save_data(self.DATA_KEY_VENDORS, vendors or [])
+
+    @staticmethod
+    def _normalize_vendor(vendor: dict, index: int) -> dict:
+        """
+        标准化单个厂商配置。
+        """
+        vendor = vendor or {}
+        vendor_id = AgentTokensPro._clean_text(vendor.get("id")) or uuid.uuid4().hex
+        return {
+            "id": vendor_id,
+            "enabled": bool(vendor.get("enabled", True)),
+            "name": AgentTokensPro._clean_text(vendor.get("name")) or f"厂商 {index + 1}",
+            "url": AgentTokensPro._clean_text(vendor.get("url")),
+            "sort_order": AgentTokensPro._to_int(vendor.get("sort_order"), index),
+        }
+
+    def get_vendors_api(self) -> schemas.Response:
+        """
+        获取厂商列表。
+        """
+        vendors = self._load_vendors()
+        # 按 sort_order 排序
+        vendors.sort(key=lambda v: AgentTokensPro._to_int(v.get("sort_order"), 0))
+        return schemas.Response(success=True, data={"vendors": vendors})
+
+    def save_vendor_api(self, payload: Optional[dict] = Body(default=None)) -> schemas.Response:
+        """
+        创建或更新单个厂商。
+        """
+        try:
+            payload = payload or {}
+            vendor_id = self._clean_text(payload.get("id"))
+            vendors = self._load_vendors()
+
+            # 标准化厂商数据
+            index = 0
+            for i, v in enumerate(vendors):
+                if v.get("id") == vendor_id:
+                    index = i
+                    break
+                index = i + 1
+
+            normalized = self._normalize_vendor(payload, index)
+            # 保持原有 sort_order（编辑时）
+            if vendor_id:
+                existing = next((v for v in vendors if v.get("id") == vendor_id), None)
+                if existing:
+                    normalized["sort_order"] = self._to_int(existing.get("sort_order"), index)
+
+            # 更新或新增
+            if vendor_id:
+                found = False
+                for i, v in enumerate(vendors):
+                    if v.get("id") == vendor_id:
+                        vendors[i] = normalized
+                        found = True
+                        break
+                if not found:
+                    vendors.append(normalized)
+            else:
+                normalized["sort_order"] = len(vendors)
+                vendors.append(normalized)
+
+            self._save_vendors(vendors)
+            return schemas.Response(success=True, data={"vendors": vendors})
+        except Exception as err:
+            logger.error(f"Agent Tokens 保存厂商失败: {err}")
+            return schemas.Response(success=False, message=str(err))
+
+    def reorder_vendors_api(self, payload: Optional[dict] = Body(default=None)) -> schemas.Response:
+        """
+        厂商排序：接收排序后的厂商 ID 列表，更新 sort_order。
+        """
+        try:
+            payload = payload or {}
+            ordered_ids = payload.get("vendor_ids") or []
+            if not isinstance(ordered_ids, list):
+                return schemas.Response(success=False, message="参数错误：vendor_ids 必须为列表")
+
+            vendors = self._load_vendors()
+            # 按 ordered_ids 重新排序
+            vendor_map = {v.get("id"): v for v in vendors}
+            reordered = []
+            for idx, vid in enumerate(ordered_ids):
+                if vid in vendor_map:
+                    vendor_map[vid]["sort_order"] = idx
+                    reordered.append(vendor_map[vid])
+            # 添加未在 ordered_ids 中的厂商（如果有）
+            for v in vendors:
+                if v.get("id") not in ordered_ids:
+                    v["sort_order"] = len(reordered)
+                    reordered.append(v)
+
+            self._save_vendors(reordered)
+            return schemas.Response(success=True, data={"vendors": reordered})
+        except Exception as err:
+            logger.error(f"Agent Tokens 厂商排序失败: {err}")
+            return schemas.Response(success=False, message=str(err))
+
+    def delete_vendor_api(self, payload: Optional[dict] = Body(default=None)) -> schemas.Response:
+        """
+        删除指定厂商。
+        """
+        try:
+            payload = payload or {}
+            vendor_id = self._clean_text(payload.get("id") or payload.get("vendor_id"))
+            if not vendor_id:
+                return schemas.Response(success=False, message="缺少厂商 ID")
+
+            vendors = self._load_vendors()
+            vendors = [v for v in vendors if v.get("id") != vendor_id]
+            self._save_vendors(vendors)
+            return schemas.Response(success=True, data={"vendors": vendors})
+        except Exception as err:
+            logger.error(f"Agent Tokens 删除厂商失败: {err}")
+            return schemas.Response(success=False, message=str(err))
 
     # ---- 供应商切换通知防轰炸 ----
 

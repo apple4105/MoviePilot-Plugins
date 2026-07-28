@@ -25,6 +25,7 @@ const configDirty = ref(false)
 const lastServerConfig = ref(null)
 let refreshTimer = null
 const managerRef = ref(null)
+const vendors = ref([])
 const status = ref({
   config: { enabled: false, show_sidebar_nav: true, max_failures: 3, providers: [] },
   providers: [],
@@ -38,6 +39,19 @@ const config = computed(() => status.value.config || { enabled: false, show_side
 const providerRows = computed(() => status.value.providers || [])
 const summary = computed(() => status.value.summary || {})
 const activeProviderId = computed(() => status.value.active_provider_id || null)
+const vendorsData = computed(() => vendors.value || [])
+
+// 从插件 API 拉取厂商列表。
+async function loadVendors() {
+  try {
+    const response = await props.api.get(`${pluginBase.value}/vendors`)
+    const data = unwrapResponse(response)
+    vendors.value = data?.vendors || data || []
+  } catch (err) {
+    // 厂商接口可能不存在，静默忽略
+    vendors.value = []
+  }
+}
 
 // 从插件 API 拉取当前配置和用量状态。
 async function loadStatus() {
@@ -55,6 +69,8 @@ async function loadStatus() {
       status.value = nextStatus
       lastServerConfig.value = JSON.parse(JSON.stringify(nextStatus.config || {}))
     }
+    // 同时加载厂商列表
+    await loadVendors()
   } catch (err) {
     error.value = err?.message || '加载失败'
   } finally {
@@ -218,6 +234,7 @@ async function queryModels({ provider, resolve, reject }) {
 
 defineExpose({
   loadStatus,
+  loadVendors,
   saveConfig,
   autoSave,
   loading,
@@ -250,6 +267,9 @@ onUnmounted(() => {
       :provider-rows="providerRows"
       :summary="summary"
       :active-provider-id="activeProviderId"
+      :vendors="vendorsData"
+      :api="props.api"
+      :plugin-base="pluginBase"
       :error="error"
       :loading="loading"
       :saving="saving"

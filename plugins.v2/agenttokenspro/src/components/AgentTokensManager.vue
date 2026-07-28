@@ -1,9 +1,10 @@
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ProviderConfigTable from './ProviderConfigTable.vue'
 import ProviderEditorDialog from './ProviderEditorDialog.vue'
 import ProviderUsageTable from './ProviderUsageTable.vue'
 import UsageOverviewCard from './UsageOverviewCard.vue'
+import VendorManager from './VendorManager.vue'
 import {
   buildProviderRows,
   buildProviderSummary,
@@ -29,6 +30,18 @@ const props = defineProps({
   activeProviderId: {
     type: String,
     default: null,
+  },
+  vendors: {
+    type: Array,
+    default: () => [],
+  },
+  api: {
+    type: Object,
+    required: true,
+  },
+  pluginBase: {
+    type: String,
+    default: 'plugin/AgentTokensPro',
   },
   error: {
     type: String,
@@ -66,10 +79,38 @@ const editedProvider = ref(createProvider())
 const failedProviderIds = ref([])
 const testFeedback = ref({ type: '', message: '', show: false })
 const dragMode = ref(false)
+const importFileInput = ref(null)
 // 单一数据源：表格始终绑定此数组，拖拽/编辑都直接操作它
 const localProviders = ref([])
 // 记录进入排序模式时的快照，用于退出时比对是否有变化
 let dragSnapshot = []
+// 厂商管理 ref
+const vendorRef = ref(null)
+// 厂商拖拽模式状态（镜像 VendorManager 内部状态）
+const vendorDragMode = ref(false)
+// 移动端判定：UA + 触控 + 窗口宽度
+const isMobile = ref(false)
+// 移动端 Tab 列表
+const mobileTabs = [
+  { value: 'usage', label: '总览' },
+  { value: 'config', label: '供应商' },
+  { value: 'vendors', label: '厂商' },
+]
+
+function checkMobile() {
+  isMobile.value = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+    || window.innerWidth <= 768
+    || ('ontouchstart' in window)
+}
+
+onMounted(() => {
+  checkMobile()
+  window.addEventListener('resize', checkMobile)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', checkMobile)
+})
 
 const configValue = computed(() => props.config || { enabled: false, show_sidebar_nav: true, max_failures: 3, providers: [] })
 const providers = computed(() => (Array.isArray(configValue.value.providers) ? configValue.value.providers : []))
@@ -124,24 +165,6 @@ function commitProvider() {
   const normalized = normalizeProvider(editedProvider.value, nextProviders.length + 1)
   normalized.enabled = true
 
-  // API Key 前三后四查重
-  const newKey = (normalized.api_key || '').trim()
-  if (newKey && newKey.length >= 7) {
-    const newFp = newKey.slice(0, 3) + '...' + newKey.slice(-4)
-    const duplicate = nextProviders.find((p, i) => {
-      if (editorIndex.value >= 0 && i === editorIndex.value) return false
-      const k = (p.api_key || '').trim()
-      if (!k || k.length < 7) return false
-      const fp = k.slice(0, 3) + '...' + k.slice(-4)
-      return fp === newFp
-    })
-    if (duplicate) {
-      const dupFp = (duplicate.api_key || '').trim().slice(0, 3) + '...' + (duplicate.api_key || '').trim().slice(-4)
-      showTestFeedback('error', `已存在相同 Key (${dupFp})，供应商「${duplicate.name || duplicate.id}」，禁止重复添加`)
-      return
-    }
-  }
-
   if (editorIndex.value >= 0) {
     nextProviders.splice(editorIndex.value, 1, normalized)
   } else {
@@ -150,6 +173,109 @@ function commitProvider() {
   configValue.value.providers = nextProviders
   showEditor.value = false
   emit('auto-save')
+}
+
+// 导出配置：将当前配置（enabled, show_sidebar_nav, max_failures, providers）和厂商列表导出为 JSON 文件。
+function handleExport() {
+  const exportData = {
+    version: 'agenttokenspro-export-v2',
+    exported_at: new Date().toISOString(),
+    config: {
+      enabled: Boolean(configValue.value.enabled),
+      show_sidebar_nav: Boolean(configValue.value.show_sidebar_nav),
+      max_failures: Number(configValue.value.max_failures) || 3,
+      providers: (configValue.value.providers || []).map(p => ({ ...p })),
+    },
+    vendors: (props.vendors || []).map(v => ({ ...v })),
+  }
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  const now = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`
+  a.download = `AgentTokensPro_config_${timestamp}.json`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+// 触发文件选择对话框。
+function handleImportClick() {
+  if (importFileInput.value) {
+    importFileInput.value.value = ''
+    importFileInput.value.click()
+  }
+}
+
+// 处理导入文件：读取 JSON 并验证格式后写入配置和厂商数据。
+async function handleImportFile(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+
+  const reader = new FileReader()
+  reader.onload = async (e) => {
+    try {
+      const data = JSON.parse(e.target?.result)
+      // 验证格式
+      const importConfig = data?.config || data
+      if (!importConfig || !Array.isArray(importConfig.providers)) {
+        alert('导入失败：文件格式不正确，缺少 providers 数组')
+        return
+      }
+      const importVendors = Array.isArray(data?.vendors) ? data.vendors : []
+      const totalCount = importConfig.providers.length + importVendors.length
+      // 确认覆盖
+      const ok = confirm(
+        `即将导入 ${importConfig.providers.length} 个供应商和 ${importVendors.length} 个厂商配置，这将覆盖当前所有配置。\n\n确定要继续吗？`,
+      )
+      if (!ok) return
+
+      // 写入配置（providers + 基础设置）
+      configValue.value = {
+        enabled: Boolean(importConfig.enabled ?? configValue.value.enabled),
+        show_sidebar_nav: Boolean(importConfig.show_sidebar_nav ?? configValue.value.show_sidebar_nav),
+        max_failures: Number(importConfig.max_failures) || 3,
+        providers: importConfig.providers.map((p, idx) => normalizeProvider(p, idx + 1)),
+      }
+      localProviders.value = [...configValue.value.providers]
+      emit('auto-save')
+
+      // 写入厂商数据（通过 API 逐条保存，保持与前端厂商管理一致的逻辑）
+      if (importVendors.length > 0) {
+        try {
+          // 先清空现有厂商：获取当前列表并逐条删除
+          const currentResp = await props.api.get(`${props.pluginBase}/vendors`)
+          const currentData = currentResp?.data?.vendors || currentResp?.data || []
+          if (Array.isArray(currentData) && currentData.length > 0) {
+            for (const v of currentData) {
+              if (v?.id) {
+                await props.api.post(`${props.pluginBase}/vendors/delete`, { id: v.id })
+              }
+            }
+          }
+          // 按 sort_order 排序后逐条新增
+          const sortedVendors = [...importVendors].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+          for (const vendor of sortedVendors) {
+            const { id, ...vendorData } = vendor // 移除旧 ID，让后端生成新 ID
+            await props.api.post(`${props.pluginBase}/vendors`, vendorData)
+          }
+        } catch (vendorErr) {
+          console.warn('厂商数据导入失败:', vendorErr)
+          alert('供应商配置已导入，但厂商数据导入失败，请手动检查厂商页。')
+        }
+      }
+
+      // 刷新厂商列表
+      emit('refresh')
+      alert(`导入成功！已恢复 ${importConfig.providers.length} 个供应商和 ${importVendors.length} 个厂商配置。`)
+    } catch (err) {
+      alert(`导入失败：${err?.message || '文件解析错误'}`)
+    }
+  }
+  reader.readAsText(file)
 }
 
 // 从配置列表中移除一个供应商。
@@ -238,10 +364,34 @@ function resetUsage(providerId, index) {
 function resetAllUsage() {
   emit('reset-all-usage')
 }
+
+// 切换厂商拖拽排序模式
+function toggleVendorDragMode() {
+  vendorRef.value?.toggleDragMode()
+}
+
+// 从总览页点击名称跳转到供应商 Tab 并打开编辑弹窗
+async function openVendorEditFromOverview(row) {
+  if (!row || !row.id) {
+    showTestFeedback('error', '供应商数据异常，无法编辑')
+    return
+  }
+  // 切换到供应商 Tab
+  activeTab.value = 'config'
+  // 等待 Tab 切换完成后再打开弹窗
+  await nextTick()
+  // 在 localProviders 中查找对应供应商
+  const index = localProviders.value.findIndex(p => p.id === row.id)
+  if (index < 0) {
+    showTestFeedback('error', `未找到供应商 [${row.name || row.id}]，可能已被删除`)
+    return
+  }
+  editProvider(index)
+}
 </script>
 
 <template>
-  <div class="agenttokens-page">
+  <div class="agenttokens-page" :class="{ 'is-mobile': isMobile }">
     <div v-if="!hideTitle" class="agenttokens-header">
       <h2 class="text-2xl font-bold leading-7 text-gray-100 truncate sm:text-3xl sm:leading-9">
         <span class="text-moviepilot">Agent Tokens 管理</span>
@@ -300,6 +450,7 @@ function resetAllUsage() {
             density="compact"
             hide-details
             variant="outlined"
+            class="center-input"
             style="max-width: 72px;"
           />
         </div>
@@ -330,11 +481,128 @@ function resetAllUsage() {
     </div>
 
     <VSheet border rounded class="agenttokens-content-panel">
-      <div class="agenttokens-tabs-row">
+      <!-- 移动端：纯静态 Flex 导航条，彻底脱离 Vuetify 滑动引擎 -->
+      <div v-if="isMobile" class="mobile-nav-bar">
+        <div class="mobile-tabs">
+          <button
+            v-for="tab in mobileTabs"
+            :key="tab.value"
+            :class="['mobile-tab-btn', { active: activeTab === tab.value }]"
+            @click="activeTab = tab.value"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
+        <div class="mobile-actions">
+          <template v-if="activeTab === 'usage'">
+            <VBtn size="x-small" variant="text" color="primary" @click="handleExport" class="mobile-action-btn">
+              <VIcon size="18">mdi-export</VIcon>
+              <span>导出</span>
+            </VBtn>
+            <VBtn size="x-small" variant="text" color="primary" @click="handleImportClick" class="mobile-action-btn">
+              <VIcon size="18">mdi-import</VIcon>
+              <span>导入</span>
+            </VBtn>
+            <input
+              ref="importFileInput"
+              type="file"
+              accept=".json"
+              style="display: none"
+              @change="handleImportFile"
+            />
+          </template>
+          <template v-if="activeTab === 'config'">
+            <VBtn size="x-small" variant="text" color="primary" @click="addProvider" class="mobile-action-btn">
+              <VIcon size="18">mdi-plus</VIcon>
+              <span>新增</span>
+            </VBtn>
+            <VBtn
+              size="x-small"
+              :variant="dragMode ? 'flat' : 'text'"
+              :color="dragMode ? 'warning' : 'default'"
+              @click="toggleDragMode"
+              class="mobile-action-btn"
+            >
+              <VIcon size="18">mdi-sort</VIcon>
+              <span>{{ dragMode ? '完成' : '排序' }}</span>
+            </VBtn>
+            <VBtn size="x-small" variant="text" color="warning" @click="resetAllUsage" class="mobile-action-btn">
+              <VIcon size="18">mdi-backup-restore</VIcon>
+              <span>重置</span>
+            </VBtn>
+          </template>
+          <template v-if="activeTab === 'vendors'">
+            <VBtn size="x-small" variant="text" color="primary" @click="vendorRef?.addVendor" class="mobile-action-btn">
+              <VIcon size="18">mdi-plus</VIcon>
+              <span>新增</span>
+            </VBtn>
+            <VBtn
+              size="x-small"
+              :variant="vendorDragMode ? 'flat' : 'text'"
+              :color="vendorDragMode ? 'warning' : 'default'"
+              @click="toggleVendorDragMode"
+              class="mobile-action-btn"
+            >
+              <VIcon size="18">mdi-sort</VIcon>
+              <span>{{ vendorDragMode ? '完成' : '排序' }}</span>
+            </VBtn>
+          </template>
+        </div>
+      </div>
+
+      <!-- PC 端：保留原 Vuetify 组件 -->
+      <div v-else class="agenttokens-tabs-row">
         <VTabs v-model="activeTab" density="comfortable">
-          <VTab value="usage">用量</VTab>
-          <VTab value="config">配置</VTab>
+          <VTab value="usage">总览</VTab>
+          <VTab value="config">供应商</VTab>
+          <VTab value="vendors">厂商</VTab>
         </VTabs>
+        <div class="agenttokens-table-actions">
+          <template v-if="activeTab === 'usage'">
+            <VBtn prepend-icon="mdi-export" color="primary" variant="tonal" @click="handleExport">
+              导出配置
+            </VBtn>
+            <VBtn prepend-icon="mdi-import" color="primary" variant="tonal" @click="handleImportClick">
+              导入配置
+            </VBtn>
+            <input
+              ref="importFileInput"
+              type="file"
+              accept=".json"
+              style="display: none"
+              @change="handleImportFile"
+            />
+          </template>
+          <template v-if="activeTab === 'config'">
+            <VBtn prepend-icon="mdi-plus" color="primary" variant="tonal" @click="addProvider">
+              新增
+            </VBtn>
+            <VBtn
+              prepend-icon="mdi-sort"
+              :color="dragMode ? 'warning' : 'default'"
+              :variant="dragMode ? 'flat' : 'tonal'"
+              @click="toggleDragMode"
+            >
+              {{ dragMode ? '完成排序' : '排序' }}
+            </VBtn>
+            <VBtn prepend-icon="mdi-backup-restore" color="warning" variant="tonal" @click="resetAllUsage">
+              重置用量
+            </VBtn>
+          </template>
+          <template v-if="activeTab === 'vendors'">
+            <VBtn prepend-icon="mdi-plus" color="primary" variant="tonal" @click="vendorRef?.addVendor">
+              新增
+            </VBtn>
+            <VBtn
+              prepend-icon="mdi-sort"
+              :color="vendorDragMode ? 'warning' : 'default'"
+              :variant="vendorDragMode ? 'flat' : 'tonal'"
+              @click="toggleVendorDragMode"
+            >
+              {{ vendorDragMode ? '完成排序' : '排序' }}
+            </VBtn>
+          </template>
+        </div>
       </div>
 
       <VDivider />
@@ -347,24 +615,11 @@ function resetAllUsage() {
             :failed-provider-ids="failedProviderIds"
             @reset="resetUsage"
             @select="selectProvider"
+            @open-vendor-edit="openVendorEditFromOverview"
           />
         </VWindowItem>
 
         <VWindowItem value="config">
-          <div class="agenttokens-table-actions">
-            <VBtn prepend-icon="mdi-plus" color="primary" variant="tonal" @click="addProvider">新增</VBtn>
-            <VBtn
-              prepend-icon="mdi-sort"
-              :color="dragMode ? 'warning' : 'default'"
-              :variant="dragMode ? 'flat' : 'tonal'"
-              @click="toggleDragMode"
-            >
-              {{ dragMode ? '完成排序' : '排序' }}
-            </VBtn>
-            <VBtn prepend-icon="mdi-backup-restore" color="warning" variant="tonal" @click="resetAllUsage">
-              重置用量
-            </VBtn>
-          </div>
           <ProviderConfigTable
             :providers="localProviders"
             :provider-rows="displayProviderRows"
@@ -379,6 +634,18 @@ function resetAllUsage() {
             @reorder="reorderProvider"
           />
         </VWindowItem>
+
+        <VWindowItem value="vendors">
+          <VendorManager
+            ref="vendorRef"
+            :vendors="props.vendors"
+            :api="props.api"
+            :plugin-base="props.pluginBase"
+            :loading="loading"
+            @refresh="emit('refresh')"
+            @drag-mode-change="vendorDragMode = $event"
+          />
+        </VWindowItem>
       </VWindow>
     </VSheet>
 
@@ -387,6 +654,8 @@ function resetAllUsage() {
       :retain-focus="false"
       :provider="editedProvider"
       :editor-index="editorIndex"
+      :existing-providers="localProviders"
+      :vendors="props.vendors"
       @after-leave="resetForm"
       @commit="commitProvider"
       @query-models="payload => emit('query-models', payload)"
@@ -496,7 +765,7 @@ function resetAllUsage() {
 
 .agenttokens-overview-grid {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) repeat(3, minmax(10rem, 1fr));
+  grid-template-columns: 2fr 1fr 1fr;
   gap: 12px;
 }
 
@@ -533,7 +802,26 @@ function resetAllUsage() {
 }
 
 .agenttokens-tabs-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: nowrap;
   padding-inline: 8px;
+  gap: 8px;
+}
+
+.agenttokens-tabs-row :deep(.v-tabs) {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.agenttokens-table-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 .agenttokens-window {
@@ -545,12 +833,16 @@ function resetAllUsage() {
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 8px;
-  margin-block-end: 12px;
+  flex: 0 0 auto;
+}
+
+.center-input :deep(input) {
+  text-align: center;
 }
 
 @media (max-width: 1100px) {
   .agenttokens-overview-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr 1fr;
   }
 
   .agenttokens-overview-card {
@@ -591,9 +883,63 @@ function resetAllUsage() {
   .agenttokens-page {
     padding: 12px;
   }
+}
 
-  .agenttokens-table-actions > :deep(.v-btn) {
-    flex: 1 1 10rem;
-  }
+/* ========== 移动端：纯静态 Flex 导航条 ========== */
+.mobile-nav-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 4px 8px;
+  overflow: hidden;
+}
+
+.mobile-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mobile-tab-btn {
+  background: none;
+  border: none;
+  font-size: 14px;
+  padding: 4px 6px;
+  cursor: pointer;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  white-space: nowrap;
+  transition: color 0.2s;
+}
+
+.mobile-tab-btn.active {
+  color: rgb(var(--v-theme-primary));
+  font-weight: bold;
+  border-bottom: 2px solid rgb(var(--v-theme-primary));
+}
+
+.mobile-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.mobile-action-btn {
+  height: 28px !important;
+  min-width: 0 !important;
+  padding: 0 6px !important;
+  font-size: 12px !important;
+  white-space: nowrap !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 2px !important;
+}
+
+.mobile-action-btn :deep(.v-btn__content) {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 2px !important;
+  font-size: 12px !important;
 }
 </style>

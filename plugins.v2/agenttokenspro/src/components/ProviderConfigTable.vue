@@ -62,20 +62,15 @@ function isFailed(row) {
   return props.failedProviderIds.includes(row.id)
 }
 
+// 点击行切换活跃供应商
 function handleRowClick(index) {
   const row = props.providers[index]
   if (!row) return
-  // 点击行也触发活跃供应商切换
   emit('select', row.id)
 }
 
 function handleToggle(index) {
   emit('toggle', index)
-}
-
-// 点击 ○ 切换活跃供应商
-function handleSelect(providerId) {
-  emit('select', providerId)
 }
 
 function rowClasses(row) {
@@ -131,16 +126,15 @@ function onDragEnd() {
         <thead>
           <tr>
             <th class="drag-col"></th>
-            <th class="select-col"></th>
-            <th>启用</th>
-            <th>名称</th>
-            <th>类型</th>
-            <th v-if="showCredentials">地址</th>
-            <th v-if="showCredentials">Key</th>
-            <th>代理</th>
-            <th>模型</th>
-            <th>额度</th>
-            <th class="text-right">操作</th>
+            <th class="col-enable">启用</th>
+            <th class="col-name">名称</th>
+            <th class="col-type">类型</th>
+            <th v-if="showCredentials" class="col-url">地址</th>
+            <th v-if="showCredentials" class="col-key">Key</th>
+            <th class="col-proxy">代理</th>
+            <th class="col-model">模型</th>
+            <th class="col-limit">额度</th>
+            <th class="col-actions">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -160,46 +154,29 @@ function onDragEnd() {
             <td class="drag-col text-center">
               <VIcon icon="mdi-drag-vertical" size="small" :color="dragMode ? 'primary' : 'disabled'" />
             </td>
-            <td class="select-col text-center" @click.stop>
-              <span
-                :class="{
-                  'provider-lightning': row.enabled && isActive(row),
-                  'provider-selectable': row.enabled && !isActive(row),
-                  'provider-disabled': !row.enabled,
-                }"
-                :title="row.enabled ? '点击设为活跃' : '已停用'"
-                @click.stop="row.enabled && handleSelect(row.id)"
-              >
-                {{ row.enabled && isActive(row) ? '⚡' : '○' }}
-              </span>
+            <td class="col-enable" @click.stop="handleToggle(index)">
+              <div class="status-toggle-cell">
+                <span :class="['status-dot', row.enabled ? 'active' : 'inactive']"></span>
+              </div>
             </td>
-            <td @click.stop>
-              <VSwitch
-                :model-value="row.enabled"
-                color="primary"
-                hide-details
-                density="compact"
-                @update:model-value="handleToggle(index)"
-              />
-            </td>
-            <td>{{ row.name }}</td>
-            <td>{{ row.provider }}</td>
-            <td v-if="showCredentials" class="truncate-cell">{{ row.base_url }}</td>
-            <td v-if="showCredentials">{{ getMaskedApiKey(row) }}</td>
-            <td>
+            <td class="col-name">{{ row.name }}</td>
+            <td class="col-type">{{ row.provider }}</td>
+            <td v-if="showCredentials" class="col-url">{{ row.base_url }}</td>
+            <td v-if="showCredentials" class="col-key">{{ getMaskedApiKey(row) }}</td>
+            <td class="col-proxy">
               <VChip size="small" :color="row.use_proxy === false ? 'default' : 'primary'" variant="tonal">
                 {{ row.use_proxy === false ? '直连' : '代理' }}
               </VChip>
             </td>
-            <td>{{ getModelName(row.model) }}</td>
-            <td>{{ row.token_limit > 0 ? formatTokens(row.token_limit) : '不限' }}</td>
-            <td class="text-right" @click.stop>
-              <VBtn icon="mdi-pencil" size="small" variant="text" @click="emit('edit', index)" />
-              <VBtn icon="mdi-delete" size="small" variant="text" color="error" @click="emit('remove', index)" />
+            <td class="col-model">{{ getModelName(row.model) }}</td>
+            <td class="col-limit">{{ row.token_limit > 0 ? formatTokens(row.token_limit) : '不限' }}</td>
+            <td class="col-actions" @click.stop>
+              <VBtn icon="mdi-pencil" size="small" variant="text" :disabled="isActive(row)" @click="emit('edit', index)" />
+              <VBtn icon="mdi-delete" size="small" variant="text" color="error" :disabled="isActive(row)" @click="emit('remove', index)" />
             </td>
           </tr>
           <tr v-if="!providers.length">
-            <td :colspan="showCredentials ? 11 : 9" class="text-center text-medium-emphasis py-8">暂无供应商</td>
+            <td :colspan="showCredentials ? 10 : 8" class="text-center text-medium-emphasis py-8">暂无供应商</td>
           </tr>
         </tbody>
       </VTable>
@@ -213,46 +190,151 @@ function onDragEnd() {
 }
 
 .provider-table-scroll {
-  overflow-x: auto;
+  overflow-x: auto !important;
   -webkit-overflow-scrolling: touch;
 }
 
-/* ① table-layout:fixed 锁定列宽，消除增减列时的全表 reflow */
-/* ② 覆盖 Vuetify 的 transition-property 去掉 height，避免高度过渡动画 */
-.provider-table-scroll :deep(table) {
-  min-width: 860px;
-  table-layout: fixed;
-  width: 100%;
+/* Vuetify VTable 内部滚动容器 */
+.provider-table-scroll :deep(.v-table__wrapper) {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
 }
 
+/* 强行撑开表格真实宽度，突破容器 100% 限制 */
+.provider-table-scroll :deep(table) {
+  min-width: 850px !important;
+  width: max-content !important;
+  table-layout: auto !important;
+}
+
+.provider-table-scroll :deep(table),
+.provider-table-scroll :deep(tr),
+.provider-table-scroll :deep(th),
+.provider-table-scroll :deep(td) {
+  vertical-align: middle !important;
+}
+
+/* 全局：强制单行、溢出隐藏、省略号截断，确保单元格独立不重叠 */
 .provider-table-scroll :deep(td),
 .provider-table-scroll :deep(th) {
   transition-property: box-shadow, opacity, background;
   overflow: hidden;
   text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
 }
 
-/* 拖拽 handle 列：始终存在于 DOM，通过 opacity/pointer-events 控制显隐 */
+/* 表头居中对齐 */
+.provider-table-scroll :deep(th) {
+  text-align: center;
+}
+
+/* 拖拽 handle 列：非拖拽模式下不占位，消除左侧空洞 */
 .provider-table-scroll :deep(.drag-col) {
-  width: 36px;
-  min-width: 36px;
-  padding: 0 2px;
+  width: 0;
+  min-width: 0;
+  padding: 0;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.15s ease;
+  transition: opacity 0.15s ease, width 0.15s ease;
 }
 
 .provider-table-scroll.is-drag-mode :deep(.drag-col) {
+  width: 36px;
+  min-width: 36px;
+  padding: 0 2px;
   opacity: 1;
   pointer-events: auto;
 }
 
-/* 选择列固定宽度 */
-.provider-table-scroll :deep(.select-col),
-.select-col {
-  width: 40px;
-  min-width: 40px;
-  padding: 0 4px;
+/* 启用列：固定 44px，居中显示 */
+.provider-table-scroll :deep(.col-enable) {
+  width: 44px !important;
+  min-width: 44px !important;
+  text-align: center !important;
+}
+
+.status-toggle-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.status-dot {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.status-dot.active {
+  background-color: #7c4dff;
+  box-shadow: 0 0 6px rgba(124, 77, 255, 0.5);
+}
+
+.status-dot.inactive {
+  border: 2px solid #ccc;
+  background-color: transparent;
+}
+
+/* 名称列：完整显示不截断，移除任何 max-width 限制 */
+.provider-table-scroll :deep(.col-name) {
+  min-width: 130px !important;
+  white-space: nowrap !important;
+}
+
+/* 类型列 */
+.provider-table-scroll :deep(.col-type) {
+  min-width: 80px !important;
+  width: 80px !important;
+}
+
+/* 地址列：长文本省略号截断 */
+.provider-table-scroll :deep(.col-url) {
+  max-width: 140px !important;
+  min-width: 80px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+/* Key 列：省略号截断 */
+.provider-table-scroll :deep(.col-key) {
+  max-width: 120px !important;
+  min-width: 80px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+/* 代理列 */
+.provider-table-scroll :deep(.col-proxy) {
+  width: 64px !important;
+  min-width: 64px !important;
+}
+
+/* 模型列：充足宽度保障完整显示，移除任何 max-width 限制 */
+.provider-table-scroll :deep(.col-model) {
+  min-width: 180px !important;
+  white-space: nowrap !important;
+}
+
+/* 额度列 */
+.provider-table-scroll :deep(.col-limit) {
+  min-width: 80px !important;
+  width: 80px !important;
+}
+
+/* 操作列 */
+.provider-table-scroll :deep(.col-actions) {
+  width: 88px !important;
+  min-width: 88px !important;
 }
 
 .clickable-row {
@@ -290,32 +372,6 @@ function onDragEnd() {
   100% { background: transparent; }
 }
 
-.provider-lightning {
-  animation: lightning-pulse 1.5s ease-in-out infinite;
-  cursor: default;
-}
-
-@keyframes lightning-pulse {
-  0% { opacity: 0.6; transform: scale(0.9); }
-  50% { opacity: 1; transform: scale(1.1); }
-  100% { opacity: 0.6; transform: scale(0.9); }
-}
-
-.provider-selectable {
-  cursor: pointer;
-  opacity: 0.5;
-  transition: opacity 0.15s ease;
-}
-
-.provider-selectable:hover {
-  opacity: 1;
-}
-
-.provider-disabled {
-  cursor: not-allowed;
-  opacity: 0.3;
-}
-
 .provider-row--drag-over {
   border-top: 2px solid rgb(var(--v-theme-primary)) !important;
 }
@@ -325,22 +381,29 @@ function onDragEnd() {
   background: rgba(var(--v-theme-primary), 0.08);
 }
 
-.truncate-cell {
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+
 
 @media (max-width: 700px) {
   .provider-table-scroll :deep(table) {
     font-size: 0.82rem;
-    min-width: 600px;
+    min-width: 500px;
   }
 
   .provider-table-scroll :deep(td),
   .provider-table-scroll :deep(th) {
-    padding: 4px 6px;
+    padding: 8px 6px;
+  }
+
+  /* 超窄屏隐去 Key 列，保留名称/类型/地址等核心列 */
+  .provider-table-scroll :deep(.col-key) {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  /* 超窄屏也隐去代理列，进一步释放空间 */
+  .provider-table-scroll :deep(.col-proxy) {
+    display: none;
   }
 }
 </style>

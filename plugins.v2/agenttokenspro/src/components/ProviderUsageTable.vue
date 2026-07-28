@@ -17,7 +17,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['reset', 'select'])
+const emit = defineEmits(['reset', 'select', 'open-vendor-edit'])
 
 // 仅展示已启用的供应商，已停用供应商不显示在用量列表中
 const displayRows = computed(() => (props.providerRows || []).filter(row => row.enabled !== false))
@@ -67,7 +67,18 @@ function isFailed(row) {
 // 点击 ○ 切换活跃供应商（仅启用状态可点击）
 function handleSelect(row) {
   if (!row.enabled) return
+  if (row.usage?.failure_count >= 3) return
   emit('select', row.id)
+}
+
+// 判断是否为故障状态（失败次数 >= 3）
+function isFaulty(row) {
+  return row.usage?.failure_count >= 3
+}
+
+// 点击名称列：通知父组件切换到供应商 Tab 并打开编辑弹窗
+function handleNameClick(row) {
+  emit('open-vendor-edit', row)
 }
 </script>
 
@@ -102,6 +113,14 @@ function handleSelect(row) {
           >
             <td class="select-col text-center">
               <span
+                v-if="row.enabled && isFaulty(row)"
+                class="provider-faulty"
+                title="故障中，无法切换"
+              >
+                <VIcon icon="mdi-cancel" size="small" color="error" />
+              </span>
+              <span
+                v-else
                 :class="{
                   'provider-lightning': row.enabled && row.id === activeProviderId,
                   'provider-selectable': row.enabled && row.id !== activeProviderId,
@@ -113,7 +132,9 @@ function handleSelect(row) {
                 {{ row.enabled && row.id === activeProviderId ? '⚡' : '○' }}
               </span>
             </td>
-            <td>{{ row.name }}</td>
+            <td class="name-cell">
+              <span class="name-link" @click="handleNameClick(row)">{{ row.name }}</span>
+            </td>
             <td>{{ getModelName(row.model) }}</td>
             <td>{{ formatTokens(row.usage?.total_tokens) }}</td>
             <td>
@@ -182,10 +203,67 @@ function handleSelect(row) {
   min-width: 1000px;
 }
 
+.provider-table-scroll :deep(table),
+.provider-table-scroll :deep(tr),
+.provider-table-scroll :deep(th),
+.provider-table-scroll :deep(td) {
+  vertical-align: middle !important;
+}
+
+.provider-table-scroll :deep(td),
+.provider-table-scroll :deep(th) {
+  white-space: nowrap;
+}
+
+/* 表头居中对齐 */
+.provider-table-scroll :deep(th) {
+  text-align: center;
+}
+
 .select-col {
-  width: 40px;
-  min-width: 40px;
-  padding: 0 4px;
+  width: 36px;
+  min-width: 36px;
+  max-width: 36px;
+  padding: 0 8px 0 4px;
+  text-align: center;
+}
+
+.select-col span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* 闪电图标样式 */
+.provider-lightning {
+  font-size: 20px !important;
+  animation: lightning-pulse 1.5s ease-in-out infinite;
+  cursor: default;
+}
+
+/* 空心圈图标样式 */
+.provider-selectable {
+  font-size: 18px !important;
+  color: #999;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+.provider-selectable:hover {
+  opacity: 1;
+}
+
+/* 停用状态图标 */
+.provider-disabled {
+  font-size: 18px !important;
+  color: #bbb;
+  cursor: not-allowed;
+  opacity: 0.3;
 }
 
 /* 名称列：避免硬折行，超出显示省略号 */
@@ -195,6 +273,27 @@ function handleSelect(row) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* 名称列可点击样式 */
+.name-cell {
+  max-width: 120px;
+}
+
+.name-link {
+  color: rgb(var(--v-theme-primary));
+  cursor: pointer;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  transition: opacity 0.15s ease;
+}
+
+.name-link:hover {
+  opacity: 0.7;
+  text-decoration: underline;
 }
 
 /* 模型列：避免挤压错位 */
@@ -243,30 +342,17 @@ function handleSelect(row) {
   100% { background: transparent; }
 }
 
-.provider-lightning {
-  animation: lightning-pulse 1.5s ease-in-out infinite;
-  cursor: default;
-}
-
 @keyframes lightning-pulse {
   0% { opacity: 0.6; transform: scale(0.9); }
   50% { opacity: 1; transform: scale(1.1); }
   100% { opacity: 0.6; transform: scale(0.9); }
 }
 
-.provider-selectable {
-  cursor: pointer;
-  opacity: 0.5;
-  transition: opacity 0.15s ease;
-}
-
-.provider-selectable:hover {
-  opacity: 1;
-}
-
-.provider-disabled {
+.provider-faulty {
   cursor: not-allowed;
-  opacity: 0.3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 @media (max-width: 768px) {
@@ -279,6 +365,19 @@ function handleSelect(row) {
   .provider-table-scroll :deep(th) {
     padding: 8px 6px;
     font-size: 0.78rem;
+  }
+
+  .select-col {
+    width: 32px;
+    min-width: 32px;
+    max-width: 32px;
+    padding: 0 6px 0 2px;
+  }
+
+  .select-col span {
+    width: 22px;
+    height: 22px;
+    font-size: 18px !important;
   }
 
   .provider-table-scroll :deep(th:nth-child(4)),

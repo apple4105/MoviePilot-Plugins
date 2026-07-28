@@ -118,6 +118,11 @@ const lastRefreshedTime = computed(() => {
   })
 })
 
+// 判断供应商是否处于故障状态（连续失败次数 > 0）
+function isProviderFaulty(row) {
+  return (row?.usage?.failure_count || 0) > 0
+}
+
 // 读取 Agent Tokens 仪表板状态。
 async function loadStatus() {
   if (!props.api?.get) {
@@ -261,7 +266,10 @@ onUnmounted(() => {
                 size="16"
               />
               <div class="agenttokens-dashboard-provider__main">
-                <div class="agenttokens-dashboard-provider__name">{{ row.name || '未命名供应商' }}</div>
+                <div
+                  class="agenttokens-dashboard-provider__name"
+                  :class="{ 'agenttokens-dashboard-provider__name--faulty': isProviderFaulty(row) }"
+                >{{ row.name || '未命名供应商' }}</div>
                 <div class="agenttokens-dashboard-provider__model">{{ row.model || '未配置模型' }}</div>
               </div>
               <div class="agenttokens-dashboard-provider__tokens">
@@ -471,6 +479,10 @@ onUnmounted(() => {
   font-size: 0.85rem;
   font-weight: 600;
   line-height: 1.2;
+}
+
+.agenttokens-dashboard-provider__name--faulty {
+  color: #ef4444 !important;
 }
 
 .agenttokens-dashboard-provider__model {
