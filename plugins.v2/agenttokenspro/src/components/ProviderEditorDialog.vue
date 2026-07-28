@@ -47,9 +47,6 @@ const modelCountText = computed(() => {
   return count > 0 ? `模型 (${count})` : '模型'
 })
 
-// 是否显示下拉箭头（模型数 > 1）
-const showDropdownArrow = computed(() => (modelOptions.value?.length || 0) > 1)
-
 // 测试按钮颜色：成功绿色、失败红色、默认紫色
 const testButtonColor = computed(() => {
   if (testResult.value?.success === true) return 'success'
@@ -206,9 +203,19 @@ async function queryModels() {
     modelOptions.value = normalizeModelOptions(result)
     if (!modelOptions.value.length) {
       modelError.value = '未获取到模型'
+      testResult.value = { success: false, message: '获取模型列表失败：未获取到模型' }
+    } else if (modelOptions.value.length === 1) {
+      // 只有一个模型时自动选中
+      props.provider.model = modelOptions.value[0].value
+      testResult.value = { success: true, message: `获取模型列表成功，共 ${modelOptions.value.length} 个模型` }
+    } else {
+      // 多个模型时默认选中第一个
+      props.provider.model = modelOptions.value[0].value
+      testResult.value = { success: true, message: `获取模型列表成功，共 ${modelOptions.value.length} 个模型` }
     }
   } catch (err) {
     modelError.value = err?.message || '未获取到模型'
+    testResult.value = { success: false, message: `获取模型列表失败：${err?.message || '未知错误'}` }
   } finally {
     loadingModels.value = false
   }
@@ -239,10 +246,6 @@ async function queryModels() {
           <VTextField v-model="provider.name" variant="outlined" density="comfortable" hide-details />
         </div>
         <div class="form-item">
-          <span class="form-label">优先级</span>
-          <VTextField v-model.number="provider.priority" type="number" variant="outlined" hide-details />
-        </div>
-        <div class="form-item">
           <span class="form-label">类型</span>
           <VSelect v-model="provider.provider" :items="PROVIDER_TYPE_OPTIONS" variant="outlined" hide-details />
         </div>
@@ -258,11 +261,7 @@ async function queryModels() {
               clearable
               hide-details
               class="model-combobox"
-            >
-              <template #append-inner>
-                <VIcon v-if="showDropdownArrow" icon="mdi-chevron-down" size="small" class="dropdown-arrow" />
-              </template>
-            </VCombobox>
+            />
             <VBtn
               icon="mdi-refresh"
               size="small"

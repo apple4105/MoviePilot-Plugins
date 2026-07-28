@@ -178,6 +178,16 @@ function selectProvider(providerId) {
     if (!provider || !provider.id) return
     resolvedId = provider.id
   }
+
+  // 检查供应商是否处于故障状态（连续失败达到阈值）
+  const providerWithUsage = displayProviderRows.value.find(p => p.id === resolvedId)
+  const failureCount = providerWithUsage?.usage?.failure_count || 0
+  const maxFailures = configValue.value.max_failures || 3
+  if (failureCount >= maxFailures) {
+    showTestFeedback('error', `供应商 [${providerWithUsage?.name || resolvedId}] 已连续失败 ${failureCount} 次，处于故障状态，无法直接启用。请先测试连通性确认恢复后再启用。`)
+    return
+  }
+
   // 将选中供应商移到列表首位（置顶）
   const idx = localProviders.value.findIndex(p => p.id === resolvedId)
   if (idx > 0) {

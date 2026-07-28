@@ -1,9 +1,6 @@
 export const PROVIDER_TYPE_OPTIONS = [
   { title: 'OpenAI Compatible', value: 'openai' },
-  { title: 'DeepSeek', value: 'deepseek' },
-  { title: 'Google Gemini', value: 'google' },
   { title: 'Anthropic Compatible', value: 'anthropic' },
-  { title: 'ChatGPT', value: 'chatgpt' },
 ]
 
 // 构建一个新的供应商默认配置。

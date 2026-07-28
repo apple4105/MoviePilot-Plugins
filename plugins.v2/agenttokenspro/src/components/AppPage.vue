@@ -97,6 +97,15 @@ async function selectProvider(providerId) {
   const provider = providers.find(p => p.id === providerId)
   if (!provider) return
 
+  // 检查供应商是否处于故障状态（连续失败达到阈值）
+  const providerWithUsage = status.value.providers?.find(p => p.id === providerId)
+  const failureCount = providerWithUsage?.usage?.failure_count || 0
+  const maxFailures = config.value.max_failures || 3
+  if (failureCount >= maxFailures) {
+    showFeedback('error', `供应商 [${provider.name}] 已连续失败 ${failureCount} 次，处于故障状态，无法直接启用。请先测试连通性确认恢复后再启用。`)
+    return
+  }
+
   // 标记为默认活跃供应商
   status.value.active_provider_id = providerId
 
@@ -151,29 +160,16 @@ async function testConnection({ payload, resolve, reject }) {
   }
 }
 
-// 处理测试失败：红闪1.5秒 + 自动切换到下一个供应商。
+// 处理测试失败：红闪1.5秒 + 显示错误提示（不自动切换，由用户手动选择）
 function handleTestFailure(providerId, message) {
   if (!managerRef.value) return
   const manager = managerRef.value
   manager.failedProviderIds = [...manager.failedProviderIds, providerId]
-  showFeedback('error', `${message}，自动切换到下一个供应商`)
+  showFeedback('error', message)
 
   setTimeout(() => {
     manager.failedProviderIds = manager.failedProviderIds.filter(id => id !== providerId)
   }, 1500)
-
-  // 自动切换到下一个可用供应商
-  const providers = config.value.providers || []
-  const nextProvider = providers.find(p =>
-    p.id !== providerId && p.enabled && p.api_key && p.base_url && p.model,
-  )
-  if (nextProvider) {
-    setTimeout(async () => {
-      status.value.active_provider_id = nextProvider.id
-      // 保存到后端，防止轮询覆盖
-      await autoSave()
-    }, 500)
-  }
 }
 
 function showFeedback(type, message) {

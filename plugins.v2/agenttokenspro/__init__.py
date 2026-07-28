@@ -1,3 +1,4 @@
+import re
 import threading
 import uuid
 from datetime import datetime
@@ -25,7 +26,7 @@ class AgentTokensPro(_PluginBase):
     plugin_name = "Agent Tokens Pro"
     plugin_desc = "管理多平台免费 Token 配额，按优先级自动切换 Agent LLM 供应商。"
     plugin_icon = "agentresourceofficer.png"
-    plugin_version = "0.0.2"
+    plugin_version = "0.0.3"
     plugin_author = "apple4105"
     author_url = "https://github.com/apple4105"
     plugin_config_prefix = "agenttokenspro_"
@@ -261,6 +262,44 @@ class AgentTokensPro(_PluginBase):
         ]
         # 不再按 priority 排序，直接保持前端传来的数组顺序
         return normalized
+
+    def _resolve_provider_name(self, raw_provider: dict, normalized_id: str,
+                               existing_providers_map: dict, used_names: set) -> str:
+        """
+        解析供应商名称，处理重名时自动添加/递增数字后缀。
+
+        规则：
+        - 编辑模式下名称未修改 → 保持原名
+        - 名称未被使用 → 直接使用
+        - 名称已被使用 → 解析基础名称，从 1 开始递增找下一个可用序号
+        """
+        name = self._clean_text(raw_provider.get("name"))
+        if not name:
+            name = "Provider"
+
+        # 编辑模式：如果名称未修改，保持原名
+        if normalized_id and normalized_id in existing_providers_map:
+            original_name = self._clean_text(existing_providers_map[normalized_id].get("name"))
+            if name == original_name:
+                return name
+
+        # 如果名称未被使用，直接使用
+        if name not in used_names:
+            return name
+
+        # 解析基础名称（去掉结尾数字）
+        match = re.match(r'^(.*?)(\d+)$', name)
+        if match:
+            base_name = match.group(1)
+        else:
+            base_name = name
+
+        # 从 1 开始找下一个可用序号
+        next_num = 1
+        while f"{base_name}{next_num}" in used_names:
+            next_num += 1
+
+        return f"{base_name}{next_num}"
 
     @staticmethod
     def _mask_api_key(api_key: str) -> str:
@@ -528,9 +567,35 @@ class AgentTokensPro(_PluginBase):
             self._enabled = bool(config.get("enabled"))
             self._show_sidebar_nav = bool(config.get("show_sidebar_nav", True))
             self._max_failures = max(self._to_int(config.get("max_failures"), self.DEFAULT_MAX_FAILURES), 1)
-            new_providers = self._normalize_providers(config.get("providers") or [])
-            # 安全校验：如果前端提交空供应商但当前已有配置，拒绝并提示
+
+            # 获取现有供应商映射（用于编辑模式判断）
             existing_providers = list(getattr(self, "_providers", []))
+            existing_providers_map = {p.get("id"): p for p in existing_providers if p.get("id")}
+
+            # 收集已使用的名称（现有供应商的名称）
+            used_names = set()
+            for p in existing_providers:
+                n = self._clean_text(p.get("name"))
+                if n:
+                    used_names.add(n)
+
+            # 标准化并处理名称重名
+            raw_providers = config.get("providers") or []
+            new_providers = []
+            for index, raw_provider in enumerate(raw_providers):
+                if not isinstance(raw_provider, dict):
+                    continue
+                normalized = self._normalize_provider(raw_provider, index)
+                # 处理名称重名
+                resolved_name = self._resolve_provider_name(
+                    raw_provider, normalized.get("id", ""),
+                    existing_providers_map, used_names
+                )
+                normalized["name"] = resolved_name
+                used_names.add(resolved_name)
+                new_providers.append(normalized)
+
+            # 安全校验：如果前端提交空供应商但当前已有配置，拒绝并提示
             if not new_providers and existing_providers:
                 logger.error(
                     f"Agent Tokens 安全拦截：前端提交了空供应商列表，但当前已有 "
@@ -570,6 +635,7 @@ class AgentTokensPro(_PluginBase):
     def list_models_api(self, payload: Optional[dict] = Body(default=None)) -> schemas.Response:
         """
         根据前端填写的供应商 API 配置拉取可用模型列表。
+        严格校验：必须携带 API Key，返回 401/402/403 时判定为失败。
         """
         payload = payload or {}
         provider = self._normalize_provider(payload, 0)
@@ -585,6 +651,13 @@ class AgentTokensPro(_PluginBase):
             headers["User-Agent"] = provider.get("user_agent")
         try:
             response = requests.get(f"{base_url}/models", headers=headers, timeout=20)
+            # 严格校验鉴权状态码
+            if response.status_code == 401:
+                return schemas.Response(success=False, message="401 Unauthorized - API Key 无效或已过期")
+            if response.status_code == 402:
+                return schemas.Response(success=False, message="402 Payment Required - 账户欠费或配额已用完")
+            if response.status_code == 403:
+                return schemas.Response(success=False, message="403 Forbidden - 无权限访问该接口")
             response.raise_for_status()
             data = response.json()
             models = data.get("data", data) if isinstance(data, dict) else data
@@ -597,10 +670,16 @@ class AgentTokensPro(_PluginBase):
                         model_id = self._clean_text(item)
                     if model_id and model_id not in model_ids:
                         model_ids.append(model_id)
+            if not model_ids:
+                return schemas.Response(success=False, message="获取模型列表失败：接口返回空列表")
             return schemas.Response(success=True, data={"models": model_ids})
+        except requests.exceptions.ConnectionError as err:
+            return schemas.Response(success=False, message=f"连接失败: 无法连接到服务器 ({err})")
+        except requests.exceptions.Timeout:
+            return schemas.Response(success=False, message="连接超时: 服务器无响应")
         except Exception as err:
             logger.warning(f"Agent Tokens 获取模型列表失败: {err}")
-            return schemas.Response(success=False, message=f"未获取到模型：{err}")
+            return schemas.Response(success=False, message=f"获取模型列表失败：{err}")
 
     def reset_usage_api(self, payload: Optional[dict] = Body(default=None)) -> schemas.Response:
         """
@@ -647,8 +726,9 @@ class AgentTokensPro(_PluginBase):
 
     def test_connection_api(self, payload: Optional[dict] = Body(default=None)) -> schemas.Response:
         """
-        测试供应商连接：先用轻量 GET /models 探测，失败时回退到最小 chat 请求。
-        仅 401/403/网络错误视为失败；HTTP 200 或有效 JSON 视为成功。
+        测试连通性：严格校验 API Key 有效性。
+        只有返回 HTTP 200 且鉴权通过时才判定为成功。
+        401/402/403 或网络错误均判定为失败。
         """
         payload = payload or {}
         base_url = self._clean_text(payload.get("base_url")).rstrip("/")
@@ -663,17 +743,26 @@ class AgentTokensPro(_PluginBase):
         if payload.get("user_agent"):
             headers["User-Agent"] = payload["user_agent"]
 
-        # 阶段 1：轻量 GET /models 探测（无需模型名）
+        # 阶段 1：GET /models 探测（携带 API Key）
         probe_error = None
         try:
             resp = requests.get(f"{base_url}/models", headers=headers, timeout=15)
-            if resp.status_code in (200, 201):
-                return schemas.Response(success=True, message="连接成功（/models 可达）")
-            if resp.status_code in (401, 403):
-                return schemas.Response(
-                    success=False,
-                    message=f"{resp.status_code} {'Unauthorized' if resp.status_code == 401 else 'Forbidden'} - API Key 无效或已过期",
-                )
+            if resp.status_code == 200:
+                # 验证返回内容有效性
+                try:
+                    data = resp.json()
+                    models = data.get("data", data) if isinstance(data, dict) else data
+                    if isinstance(models, list):
+                        return schemas.Response(success=True, message="连接成功（鉴权通过，/models 可达）")
+                    return schemas.Response(success=True, message="连接成功（鉴权通过）")
+                except Exception:
+                    return schemas.Response(success=True, message="连接成功（鉴权通过）")
+            if resp.status_code == 401:
+                return schemas.Response(success=False, message="401 Unauthorized - API Key 无效或已过期")
+            if resp.status_code == 402:
+                return schemas.Response(success=False, message="402 Payment Required - 账户欠费或配额已用完")
+            if resp.status_code == 403:
+                return schemas.Response(success=False, message="403 Forbidden - 无权限访问该接口")
             # 其他状态码记录但不立即失败，继续尝试 chat
             probe_error = f"/models 返回 {resp.status_code}"
         except requests.exceptions.ConnectionError as err:
