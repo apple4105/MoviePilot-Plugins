@@ -174,3 +174,9 @@ MoviePilot-Plugins/
 
 - 请参阅 [V2 版本插件开发指南](./docs/V2_Plugin_Development.md)。
 - 如果你要先理解本仓库与 `MoviePilot` / `MoviePilot-Frontend` 的分工，以及元数据和发布链路，再开始写代码，建议先看 [仓库指南](./docs/Repository_Guide.md)。
+
+---
+
+## 致谢
+
+本仓库 fork 自 [jxxghp/MoviePilot-Plugins](https://github.com/jxxghp/MoviePilot-Plugins)，感谢原作者的贡献。在此基础上新增了 `AgentTokensPro` 插件，基于原 `AgentTokens` 进行增强开发。

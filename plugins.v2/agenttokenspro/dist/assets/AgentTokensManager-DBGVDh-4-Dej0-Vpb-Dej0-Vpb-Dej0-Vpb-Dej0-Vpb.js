@@ -1,7 +1,7 @@
 import { importShared } from './__federation_fn_import-JrT3xvdd.js';
 import { _ as _export_sfc, f as formatTokens, P as PROVIDER_TYPE_OPTIONS, n as normalizeModelOptions, a as createProvider, b as buildProviderRows, d as buildProviderSummary, e as normalizeProvider, g as getNextProviderPriority } from './_plugin-vue_export-helper-BYTvrSm4.js';
 
-const {createElementVNode:_createElementVNode$5,openBlock:_openBlock$5,createElementBlock:_createElementBlock$4,createCommentVNode:_createCommentVNode$4,renderList:_renderList$2,Fragment:_Fragment$4,resolveComponent:_resolveComponent$5,createVNode:_createVNode$5,withModifiers:_withModifiers$2,toDisplayString:_toDisplayString$5,createTextVNode:_createTextVNode$5,withCtx:_withCtx$5,unref:_unref$4,normalizeClass:_normalizeClass$2,createBlock:_createBlock$5} = await importShared('vue');
+const {createElementVNode:_createElementVNode$5,openBlock:_openBlock$5,createElementBlock:_createElementBlock$4,createCommentVNode:_createCommentVNode$4,renderList:_renderList$3,Fragment:_Fragment$4,resolveComponent:_resolveComponent$5,createVNode:_createVNode$5,normalizeClass:_normalizeClass$3,withModifiers:_withModifiers$2,toDisplayString:_toDisplayString$5,createTextVNode:_createTextVNode$5,withCtx:_withCtx$5,unref:_unref$4,createBlock:_createBlock$5} = await importShared('vue');
 
 
 const _hoisted_1$5 = {
@@ -14,21 +14,23 @@ const _hoisted_2$5 = {
 };
 const _hoisted_3$5 = ["draggable", "onClick", "onDragstart", "onDragover", "onDrop"];
 const _hoisted_4$5 = { class: "drag-col text-center" };
-const _hoisted_5$5 = { class: "col-name" };
-const _hoisted_6$5 = { class: "col-type" };
-const _hoisted_7$5 = {
+const _hoisted_5$5 = ["onClick"];
+const _hoisted_6$5 = { class: "status-toggle-cell" };
+const _hoisted_7$5 = { class: "col-name" };
+const _hoisted_8$5 = { class: "col-type" };
+const _hoisted_9$4 = {
   key: 0,
-  class: "col-url truncate-cell"
+  class: "col-url"
 };
-const _hoisted_8$5 = {
+const _hoisted_10$4 = {
   key: 1,
   class: "col-key"
 };
-const _hoisted_9$4 = { class: "col-proxy" };
-const _hoisted_10$4 = { class: "col-model" };
-const _hoisted_11$4 = { class: "col-limit" };
-const _hoisted_12$3 = { key: 0 };
-const _hoisted_13$3 = ["colspan"];
+const _hoisted_11$4 = { class: "col-proxy" };
+const _hoisted_12$4 = { class: "col-model" };
+const _hoisted_13$3 = { class: "col-limit" };
+const _hoisted_14$3 = { key: 0 };
+const _hoisted_15$2 = ["colspan"];
 
 const {ref: ref$3} = await importShared('vue');
 
@@ -157,7 +159,6 @@ function onDragEnd() {
 
 return (_ctx, _cache) => {
   const _component_VIcon = _resolveComponent$5("VIcon");
-  const _component_VSwitch = _resolveComponent$5("VSwitch");
   const _component_VChip = _resolveComponent$5("VChip");
   const _component_VBtn = _resolveComponent$5("VBtn");
   const _component_VTable = _resolveComponent$5("VTable");
@@ -170,34 +171,34 @@ return (_ctx, _cache) => {
   }, {
     default: _withCtx$5(() => [
       _createElementVNode$5("div", {
-        class: _normalizeClass$2(["provider-table-scroll", { 'is-drag-mode': __props.dragMode }])
+        class: _normalizeClass$3(["provider-table-scroll", { 'is-drag-mode': __props.dragMode }])
       }, [
         _createVNode$5(_component_VTable, { density: "comfortable" }, {
           default: _withCtx$5(() => [
             _createElementVNode$5("thead", null, [
               _createElementVNode$5("tr", null, [
-                _cache[2] || (_cache[2] = _createElementVNode$5("th", { class: "drag-col" }, null, -1)),
-                _cache[3] || (_cache[3] = _createElementVNode$5("th", { class: "col-enable" }, "启用", -1)),
-                _cache[4] || (_cache[4] = _createElementVNode$5("th", { class: "col-name" }, "名称", -1)),
-                _cache[5] || (_cache[5] = _createElementVNode$5("th", { class: "col-type" }, "类型", -1)),
+                _cache[1] || (_cache[1] = _createElementVNode$5("th", { class: "drag-col" }, null, -1)),
+                _cache[2] || (_cache[2] = _createElementVNode$5("th", { class: "col-enable" }, "启用", -1)),
+                _cache[3] || (_cache[3] = _createElementVNode$5("th", { class: "col-name" }, "名称", -1)),
+                _cache[4] || (_cache[4] = _createElementVNode$5("th", { class: "col-type" }, "类型", -1)),
                 (__props.showCredentials)
                   ? (_openBlock$5(), _createElementBlock$4("th", _hoisted_1$5, "地址"))
                   : _createCommentVNode$4("", true),
                 (__props.showCredentials)
                   ? (_openBlock$5(), _createElementBlock$4("th", _hoisted_2$5, "Key"))
                   : _createCommentVNode$4("", true),
-                _cache[6] || (_cache[6] = _createElementVNode$5("th", { class: "col-proxy" }, "代理", -1)),
-                _cache[7] || (_cache[7] = _createElementVNode$5("th", { class: "col-model" }, "模型", -1)),
-                _cache[8] || (_cache[8] = _createElementVNode$5("th", { class: "col-limit" }, "额度", -1)),
-                _cache[9] || (_cache[9] = _createElementVNode$5("th", { class: "col-actions" }, "操作", -1))
+                _cache[5] || (_cache[5] = _createElementVNode$5("th", { class: "col-proxy" }, "代理", -1)),
+                _cache[6] || (_cache[6] = _createElementVNode$5("th", { class: "col-model" }, "模型", -1)),
+                _cache[7] || (_cache[7] = _createElementVNode$5("th", { class: "col-limit" }, "额度", -1)),
+                _cache[8] || (_cache[8] = _createElementVNode$5("th", { class: "col-actions" }, "操作", -1))
               ])
             ]),
             _createElementVNode$5("tbody", null, [
-              (_openBlock$5(true), _createElementBlock$4(_Fragment$4, null, _renderList$2(__props.providers, (row, index) => {
+              (_openBlock$5(true), _createElementBlock$4(_Fragment$4, null, _renderList$3(__props.providers, (row, index) => {
                 return (_openBlock$5(), _createElementBlock$4("tr", {
                   key: row.id || index,
                   draggable: __props.dragMode,
-                  class: _normalizeClass$2([rowClasses(row), "clickable-row"]),
+                  class: _normalizeClass$3([rowClasses(row), "clickable-row"]),
                   onClick: $event => (handleRowClick(index)),
                   onDragstart: $event => (onDragStart(index, $event)),
                   onDragover: $event => (onDragOver(index, $event)),
@@ -214,26 +215,23 @@ return (_ctx, _cache) => {
                   ]),
                   _createElementVNode$5("td", {
                     class: "col-enable",
-                    onClick: _cache[0] || (_cache[0] = _withModifiers$2(() => {}, ["stop"]))
+                    onClick: _withModifiers$2($event => (handleToggle(index)), ["stop"])
                   }, [
-                    _createVNode$5(_component_VSwitch, {
-                      "model-value": row.enabled,
-                      disabled: isActive(row),
-                      color: "primary",
-                      "hide-details": "",
-                      density: "compact",
-                      "onUpdate:modelValue": $event => (handleToggle(index))
-                    }, null, 8, ["model-value", "disabled", "onUpdate:modelValue"])
-                  ]),
-                  _createElementVNode$5("td", _hoisted_5$5, _toDisplayString$5(row.name), 1),
-                  _createElementVNode$5("td", _hoisted_6$5, _toDisplayString$5(row.provider), 1),
+                    _createElementVNode$5("div", _hoisted_6$5, [
+                      _createElementVNode$5("span", {
+                        class: _normalizeClass$3(['status-dot', row.enabled ? 'active' : 'inactive'])
+                      }, null, 2)
+                    ])
+                  ], 8, _hoisted_5$5),
+                  _createElementVNode$5("td", _hoisted_7$5, _toDisplayString$5(row.name), 1),
+                  _createElementVNode$5("td", _hoisted_8$5, _toDisplayString$5(row.provider), 1),
                   (__props.showCredentials)
-                    ? (_openBlock$5(), _createElementBlock$4("td", _hoisted_7$5, _toDisplayString$5(row.base_url), 1))
+                    ? (_openBlock$5(), _createElementBlock$4("td", _hoisted_9$4, _toDisplayString$5(row.base_url), 1))
                     : _createCommentVNode$4("", true),
                   (__props.showCredentials)
-                    ? (_openBlock$5(), _createElementBlock$4("td", _hoisted_8$5, _toDisplayString$5(getMaskedApiKey(row)), 1))
+                    ? (_openBlock$5(), _createElementBlock$4("td", _hoisted_10$4, _toDisplayString$5(getMaskedApiKey(row)), 1))
                     : _createCommentVNode$4("", true),
-                  _createElementVNode$5("td", _hoisted_9$4, [
+                  _createElementVNode$5("td", _hoisted_11$4, [
                     _createVNode$5(_component_VChip, {
                       size: "small",
                       color: row.use_proxy === false ? 'default' : 'primary',
@@ -245,11 +243,11 @@ return (_ctx, _cache) => {
                       _: 2
                     }, 1032, ["color"])
                   ]),
-                  _createElementVNode$5("td", _hoisted_10$4, _toDisplayString$5(getModelName(row.model)), 1),
-                  _createElementVNode$5("td", _hoisted_11$4, _toDisplayString$5(row.token_limit > 0 ? _unref$4(formatTokens)(row.token_limit) : '不限'), 1),
+                  _createElementVNode$5("td", _hoisted_12$4, _toDisplayString$5(getModelName(row.model)), 1),
+                  _createElementVNode$5("td", _hoisted_13$3, _toDisplayString$5(row.token_limit > 0 ? _unref$4(formatTokens)(row.token_limit) : '不限'), 1),
                   _createElementVNode$5("td", {
                     class: "col-actions",
-                    onClick: _cache[1] || (_cache[1] = _withModifiers$2(() => {}, ["stop"]))
+                    onClick: _cache[0] || (_cache[0] = _withModifiers$2(() => {}, ["stop"]))
                   }, [
                     _createVNode$5(_component_VBtn, {
                       icon: "mdi-pencil",
@@ -270,11 +268,11 @@ return (_ctx, _cache) => {
                 ], 42, _hoisted_3$5))
               }), 128)),
               (!__props.providers.length)
-                ? (_openBlock$5(), _createElementBlock$4("tr", _hoisted_12$3, [
+                ? (_openBlock$5(), _createElementBlock$4("tr", _hoisted_14$3, [
                     _createElementVNode$5("td", {
                       colspan: __props.showCredentials ? 10 : 8,
                       class: "text-center text-medium-emphasis py-8"
-                    }, "暂无供应商", 8, _hoisted_13$3)
+                    }, "暂无供应商", 8, _hoisted_15$2)
                   ]))
                 : _createCommentVNode$4("", true)
             ])
@@ -289,7 +287,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const ProviderConfigTable = /*#__PURE__*/_export_sfc(_sfc_main$5, [['__scopeId',"data-v-9d74d953"]]);
+const ProviderConfigTable = /*#__PURE__*/_export_sfc(_sfc_main$5, [['__scopeId',"data-v-75b8ba5d"]]);
 
 const {toDisplayString:_toDisplayString$4,createElementVNode:_createElementVNode$4,resolveComponent:_resolveComponent$4,createVNode:_createVNode$4,createTextVNode:_createTextVNode$4,withModifiers:_withModifiers$1,withCtx:_withCtx$4,unref:_unref$3,openBlock:_openBlock$4,createBlock:_createBlock$4,createCommentVNode:_createCommentVNode$3,createElementBlock:_createElementBlock$3,Fragment:_Fragment$3} = await importShared('vue');
 
@@ -305,9 +303,9 @@ const _hoisted_8$4 = { class: "input-group" };
 const _hoisted_9$3 = { class: "form-item" };
 const _hoisted_10$3 = { class: "form-item" };
 const _hoisted_11$3 = { class: "form-item form-item--merged" };
-const _hoisted_12$2 = { class: "form-item__half" };
+const _hoisted_12$3 = { class: "form-item__half" };
 const _hoisted_13$2 = { class: "form-item__half" };
-const _hoisted_14$1 = {
+const _hoisted_14$2 = {
   key: 0,
   class: "px-4 pb-3"
 };
@@ -864,7 +862,7 @@ return (_ctx, _cache) => {
                   }, null, 8, ["modelValue"])
                 ]),
                 _createElementVNode$4("div", _hoisted_11$3, [
-                  _createElementVNode$4("div", _hoisted_12$2, [
+                  _createElementVNode$4("div", _hoisted_12$3, [
                     _cache[24] || (_cache[24] = _createElementVNode$4("span", { class: "form-label" }, "Token 额度", -1)),
                     _createVNode$4(_component_VTextField, {
                       modelValue: __props.provider.token_limit,
@@ -915,7 +913,7 @@ return (_ctx, _cache) => {
               _: 1
             }),
             (testResult.value)
-              ? (_openBlock$4(), _createElementBlock$3("div", _hoisted_14$1, [
+              ? (_openBlock$4(), _createElementBlock$3("div", _hoisted_14$2, [
                   _createVNode$4(_component_VAlert, {
                     type: testResult.value.success ? 'success' : 'error',
                     variant: "tonal",
@@ -1026,7 +1024,7 @@ return (_ctx, _cache) => {
 };
 const ProviderEditorDialog = /*#__PURE__*/_export_sfc(_sfc_main$4, [['__scopeId',"data-v-a5025a9e"]]);
 
-const {createElementVNode:_createElementVNode$3,renderList:_renderList$1,Fragment:_Fragment$2,openBlock:_openBlock$3,createElementBlock:_createElementBlock$2,resolveComponent:_resolveComponent$3,createVNode:_createVNode$3,createCommentVNode:_createCommentVNode$2,toDisplayString:_toDisplayString$3,normalizeClass:_normalizeClass$1,unref:_unref$2,createTextVNode:_createTextVNode$3,mergeProps:_mergeProps,withCtx:_withCtx$3,createBlock:_createBlock$3} = await importShared('vue');
+const {createElementVNode:_createElementVNode$3,renderList:_renderList$2,Fragment:_Fragment$2,openBlock:_openBlock$3,createElementBlock:_createElementBlock$2,resolveComponent:_resolveComponent$3,createVNode:_createVNode$3,createCommentVNode:_createCommentVNode$2,toDisplayString:_toDisplayString$3,normalizeClass:_normalizeClass$2,unref:_unref$2,createTextVNode:_createTextVNode$3,mergeProps:_mergeProps,withCtx:_withCtx$3,createBlock:_createBlock$3} = await importShared('vue');
 
 
 const _hoisted_1$3 = { class: "provider-table-scroll" };
@@ -1037,21 +1035,23 @@ const _hoisted_3$3 = {
   title: "故障中，无法切换"
 };
 const _hoisted_4$3 = ["title", "onClick"];
-const _hoisted_5$3 = { class: "progress-cell" };
-const _hoisted_6$3 = { class: "text-success" };
-const _hoisted_7$3 = { class: "error-cell" };
-const _hoisted_8$3 = {
+const _hoisted_5$3 = { class: "name-cell" };
+const _hoisted_6$3 = ["onClick"];
+const _hoisted_7$3 = { class: "progress-cell" };
+const _hoisted_8$3 = { class: "text-success" };
+const _hoisted_9$2 = { class: "error-cell" };
+const _hoisted_10$2 = {
   key: 1,
   class: "text-medium-emphasis"
 };
-const _hoisted_9$2 = { class: "time-cell" };
-const _hoisted_10$2 = { key: 0 };
-const _hoisted_11$2 = {
+const _hoisted_11$2 = { class: "time-cell" };
+const _hoisted_12$2 = { key: 0 };
+const _hoisted_13$1 = {
   key: 1,
   class: "text-medium-emphasis"
 };
-const _hoisted_12$1 = { class: "text-right" };
-const _hoisted_13$1 = { key: 0 };
+const _hoisted_14$1 = { class: "text-right" };
+const _hoisted_15$1 = { key: 0 };
 
 const {computed: computed$3} = await importShared('vue');
 
@@ -1072,7 +1072,7 @@ const _sfc_main$3 = {
     default: () => [],
   },
 },
-  emits: ['reset', 'select'],
+  emits: ['reset', 'select', 'open-vendor-edit'],
   setup(__props, { emit: __emit }) {
 
 const props = __props;
@@ -1080,7 +1080,17 @@ const props = __props;
 const emit = __emit;
 
 // 仅展示已启用的供应商，已停用供应商不显示在用量列表中
-const displayRows = computed$3(() => (props.providerRows || []).filter(row => row.enabled !== false));
+// 排序：故障/被禁 Token 置底
+const displayRows = computed$3(() => {
+  const rows = (props.providerRows || []).filter(row => row.enabled !== false);
+  return [...rows].sort((a, b) => {
+    const aFaulty = (a.usage?.failure_count || 0) >= 3 || a.usage?.exhausted;
+    const bFaulty = (b.usage?.failure_count || 0) >= 3 || b.usage?.exhausted;
+    if (aFaulty && !bFaulty) return 1
+    if (!aFaulty && bFaulty) return -1
+    return 0
+  })
+});
 
 // 安全获取模型名称字符串，防止 VCombobox 返回对象导致显示 [object Object]
 function getModelName(model) {
@@ -1132,6 +1142,11 @@ function isFaulty(row) {
   return row.usage?.failure_count >= 3
 }
 
+// 点击名称列：通知父组件切换到供应商 Tab 并打开编辑弹窗
+function handleNameClick(row) {
+  emit('open-vendor-edit', row);
+}
+
 return (_ctx, _cache) => {
   const _component_VIcon = _resolveComponent$3("VIcon");
   const _component_VProgressLinear = _resolveComponent$3("VProgressLinear");
@@ -1167,10 +1182,10 @@ return (_ctx, _cache) => {
               ])
             ], -1)),
             _createElementVNode$3("tbody", null, [
-              (_openBlock$3(true), _createElementBlock$2(_Fragment$2, null, _renderList$1(displayRows.value, (row, index) => {
+              (_openBlock$3(true), _createElementBlock$2(_Fragment$2, null, _renderList$2(displayRows.value, (row, index) => {
                 return (_openBlock$3(), _createElementBlock$2("tr", {
                   key: row.id || index,
-                  class: _normalizeClass$1({
+                  class: _normalizeClass$2({
               'provider-row--active': row.id === __props.activeProviderId,
               'provider-row--failed': isFailed(row),
             })
@@ -1186,7 +1201,7 @@ return (_ctx, _cache) => {
                         ]))
                       : (_openBlock$3(), _createElementBlock$2("span", {
                           key: 1,
-                          class: _normalizeClass$1({
+                          class: _normalizeClass$2({
                   'provider-lightning': row.enabled && row.id === __props.activeProviderId,
                   'provider-selectable': row.enabled && row.id !== __props.activeProviderId,
                   'provider-disabled': !row.enabled,
@@ -1195,11 +1210,16 @@ return (_ctx, _cache) => {
                           onClick: $event => (handleSelect(row))
                         }, _toDisplayString$3(row.enabled && row.id === __props.activeProviderId ? '⚡' : '○'), 11, _hoisted_4$3))
                   ]),
-                  _createElementVNode$3("td", null, _toDisplayString$3(row.name), 1),
+                  _createElementVNode$3("td", _hoisted_5$3, [
+                    _createElementVNode$3("span", {
+                      class: "name-link",
+                      onClick: $event => (handleNameClick(row))
+                    }, _toDisplayString$3(row.name), 9, _hoisted_6$3)
+                  ]),
                   _createElementVNode$3("td", null, _toDisplayString$3(getModelName(row.model)), 1),
                   _createElementVNode$3("td", null, _toDisplayString$3(_unref$2(formatTokens)(row.usage?.total_tokens)), 1),
                   _createElementVNode$3("td", null, _toDisplayString$3(row.usage?.remaining_tokens === null ? '不限' : _unref$2(formatTokens)(row.usage?.remaining_tokens)), 1),
-                  _createElementVNode$3("td", _hoisted_5$3, [
+                  _createElementVNode$3("td", _hoisted_7$3, [
                     _createVNode$3(_component_VProgressLinear, {
                       "model-value": row.usage?.usage_percent || 0,
                       color: rowStatusColor(row),
@@ -1209,13 +1229,13 @@ return (_ctx, _cache) => {
                   ]),
                   _createElementVNode$3("td", null, _toDisplayString$3(row.usage?.runs || 0), 1),
                   _createElementVNode$3("td", null, [
-                    _createElementVNode$3("span", _hoisted_6$3, _toDisplayString$3(row.usage?.success_count || 0), 1),
+                    _createElementVNode$3("span", _hoisted_8$3, _toDisplayString$3(row.usage?.success_count || 0), 1),
                     _cache[0] || (_cache[0] = _createTextVNode$3(" / ", -1)),
                     _createElementVNode$3("span", {
-                      class: _normalizeClass$1({ 'text-error': (row.usage?.failure_count || 0) > 0 })
+                      class: _normalizeClass$2({ 'text-error': (row.usage?.failure_count || 0) > 0 })
                     }, _toDisplayString$3(row.usage?.failure_count || 0), 3)
                   ]),
-                  _createElementVNode$3("td", _hoisted_7$3, [
+                  _createElementVNode$3("td", _hoisted_9$2, [
                     (row.usage?.last_error)
                       ? (_openBlock$3(), _createBlock$3(_component_VTooltip, {
                           key: 0,
@@ -1229,12 +1249,12 @@ return (_ctx, _cache) => {
                           ]),
                           _: 2
                         }, 1024))
-                      : (_openBlock$3(), _createElementBlock$2("span", _hoisted_8$3, "-"))
+                      : (_openBlock$3(), _createElementBlock$2("span", _hoisted_10$2, "-"))
                   ]),
-                  _createElementVNode$3("td", _hoisted_9$2, [
+                  _createElementVNode$3("td", _hoisted_11$2, [
                     (row.usage?.last_used_at)
-                      ? (_openBlock$3(), _createElementBlock$2("span", _hoisted_10$2, _toDisplayString$3(formatTime(row.usage.last_used_at)), 1))
-                      : (_openBlock$3(), _createElementBlock$2("span", _hoisted_11$2, "-"))
+                      ? (_openBlock$3(), _createElementBlock$2("span", _hoisted_12$2, _toDisplayString$3(formatTime(row.usage.last_used_at)), 1))
+                      : (_openBlock$3(), _createElementBlock$2("span", _hoisted_13$1, "-"))
                   ]),
                   _createElementVNode$3("td", null, [
                     _createVNode$3(_component_VChip, {
@@ -1248,7 +1268,7 @@ return (_ctx, _cache) => {
                       _: 2
                     }, 1032, ["color"])
                   ]),
-                  _createElementVNode$3("td", _hoisted_12$1, [
+                  _createElementVNode$3("td", _hoisted_14$1, [
                     _createVNode$3(_component_VBtn, {
                       icon: "mdi-backup-restore",
                       size: "small",
@@ -1259,7 +1279,7 @@ return (_ctx, _cache) => {
                 ], 2))
               }), 128)),
               (!displayRows.value.length)
-                ? (_openBlock$3(), _createElementBlock$2("tr", _hoisted_13$1, [...(_cache[1] || (_cache[1] = [
+                ? (_openBlock$3(), _createElementBlock$2("tr", _hoisted_15$1, [...(_cache[1] || (_cache[1] = [
                     _createElementVNode$3("td", {
                       colspan: "13",
                       class: "text-center text-medium-emphasis py-8"
@@ -1278,7 +1298,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const ProviderUsageTable = /*#__PURE__*/_export_sfc(_sfc_main$3, [['__scopeId',"data-v-4682eee7"]]);
+const ProviderUsageTable = /*#__PURE__*/_export_sfc(_sfc_main$3, [['__scopeId',"data-v-f7797d74"]]);
 
 const {toDisplayString:_toDisplayString$2,createElementVNode:_createElementVNode$2,resolveComponent:_resolveComponent$2,withCtx:_withCtx$2,createVNode:_createVNode$2,unref:_unref$1,createTextVNode:_createTextVNode$2,openBlock:_openBlock$2,createBlock:_createBlock$2} = await importShared('vue');
 
@@ -1386,29 +1406,30 @@ return (_ctx, _cache) => {
 };
 const UsageOverviewCard = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-435e5c32"]]);
 
-const {toDisplayString:_toDisplayString$1,createTextVNode:_createTextVNode$1,resolveComponent:_resolveComponent$1,withCtx:_withCtx$1,openBlock:_openBlock$1,createBlock:_createBlock$1,createCommentVNode:_createCommentVNode$1,createVNode:_createVNode$1,withModifiers:_withModifiers,createElementVNode:_createElementVNode$1,createElementBlock:_createElementBlock$1,renderList:_renderList,Fragment:_Fragment$1,normalizeClass:_normalizeClass} = await importShared('vue');
+const {toDisplayString:_toDisplayString$1,createTextVNode:_createTextVNode$1,resolveComponent:_resolveComponent$1,withCtx:_withCtx$1,openBlock:_openBlock$1,createBlock:_createBlock$1,createCommentVNode:_createCommentVNode$1,createVNode:_createVNode$1,createElementBlock:_createElementBlock$1,createElementVNode:_createElementVNode$1,renderList:_renderList$1,Fragment:_Fragment$1,normalizeClass:_normalizeClass$1,withModifiers:_withModifiers} = await importShared('vue');
 
 
 const _hoisted_1$1 = { class: "vendor-manager" };
-const _hoisted_2$1 = { class: "vendor-table-actions" };
-const _hoisted_3$1 = {
+const _hoisted_2$1 = {
   key: 0,
   class: "drag-col"
 };
-const _hoisted_4$1 = ["draggable", "onDragstart", "onDragover", "onDrop"];
-const _hoisted_5$1 = {
+const _hoisted_3$1 = ["draggable", "onDragstart", "onDragover", "onDrop"];
+const _hoisted_4$1 = {
   key: 0,
   class: "drag-col text-center"
 };
-const _hoisted_6$1 = { class: "name-col" };
-const _hoisted_7$1 = { key: 1 };
-const _hoisted_8$1 = { class: "url-col" };
-const _hoisted_9$1 = {
+const _hoisted_5$1 = ["onClick"];
+const _hoisted_6$1 = { class: "status-toggle-cell" };
+const _hoisted_7$1 = { class: "name-col" };
+const _hoisted_8$1 = { key: 1 };
+const _hoisted_9$1 = { class: "url-col" };
+const _hoisted_10$1 = {
   key: 1,
   class: "url-text"
 };
-const _hoisted_10$1 = { key: 0 };
-const _hoisted_11$1 = ["colspan"];
+const _hoisted_11$1 = { key: 0 };
+const _hoisted_12$1 = ["colspan"];
 
 const {computed: computed$1,ref: ref$1,watch: watch$1} = await importShared('vue');
 
@@ -1434,10 +1455,12 @@ const _sfc_main$1 = {
     default: 'plugin/AgentTokensPro',
   },
 },
-  emits: ['refresh', 'error'],
-  setup(__props, { emit: __emit }) {
+  emits: ['refresh', 'error', 'drag-mode-change'],
+  setup(__props, { expose: __expose, emit: __emit }) {
 
 const props = __props;
+
+const emit = __emit;
 
 // 本地厂商列表
 const localVendors = ref$1([]);
@@ -1581,6 +1604,7 @@ function toggleDragMode() {
   } else {
     dragMode.value = true;
   }
+  emit('drag-mode-change', dragMode.value);
 }
 
 async function saveOrder() {
@@ -1649,13 +1673,18 @@ function rowClasses(index) {
   }
 }
 
+// 暴露方法供父组件调用
+__expose({
+  addVendor,
+  toggleDragMode,
+});
+
 return (_ctx, _cache) => {
   const _component_VAlert = _resolveComponent$1("VAlert");
   const _component_VSlideYTransition = _resolveComponent$1("VSlideYTransition");
-  const _component_VBtn = _resolveComponent$1("VBtn");
   const _component_VIcon = _resolveComponent$1("VIcon");
-  const _component_VSwitch = _resolveComponent$1("VSwitch");
   const _component_VTextField = _resolveComponent$1("VTextField");
+  const _component_VBtn = _resolveComponent$1("VBtn");
   const _component_VTable = _resolveComponent$1("VTable");
   const _component_VSheet = _resolveComponent$1("VSheet");
 
@@ -1681,31 +1710,6 @@ return (_ctx, _cache) => {
       ]),
       _: 1
     }),
-    _createElementVNode$1("div", _hoisted_2$1, [
-      _createVNode$1(_component_VBtn, {
-        "prepend-icon": "mdi-plus",
-        color: "primary",
-        variant: "tonal",
-        loading: saving.value,
-        onClick: _withModifiers(addVendor, ["prevent","stop"])
-      }, {
-        default: _withCtx$1(() => [...(_cache[6] || (_cache[6] = [
-          _createTextVNode$1(" 新增 ", -1)
-        ]))]),
-        _: 1
-      }, 8, ["loading"]),
-      _createVNode$1(_component_VBtn, {
-        "prepend-icon": "mdi-sort",
-        color: dragMode.value ? 'warning' : 'default',
-        variant: dragMode.value ? 'flat' : 'tonal',
-        onClick: toggleDragMode
-      }, {
-        default: _withCtx$1(() => [
-          _createTextVNode$1(_toDisplayString$1(dragMode.value ? '完成排序' : '排序'), 1)
-        ]),
-        _: 1
-      }, 8, ["color", "variant"])
-    ]),
     _createVNode$1(_component_VSheet, {
       border: "",
       rounded: "",
@@ -1713,27 +1717,27 @@ return (_ctx, _cache) => {
     }, {
       default: _withCtx$1(() => [
         _createElementVNode$1("div", {
-          class: _normalizeClass(["vendor-table-scroll", { 'is-drag-mode': dragMode.value }])
+          class: _normalizeClass$1(["vendor-table-scroll", { 'is-drag-mode': dragMode.value }])
         }, [
           _createVNode$1(_component_VTable, { density: "comfortable" }, {
             default: _withCtx$1(() => [
               _createElementVNode$1("thead", null, [
                 _createElementVNode$1("tr", null, [
                   (dragMode.value)
-                    ? (_openBlock$1(), _createElementBlock$1("th", _hoisted_3$1))
+                    ? (_openBlock$1(), _createElementBlock$1("th", _hoisted_2$1))
                     : _createCommentVNode$1("", true),
-                  _cache[7] || (_cache[7] = _createElementVNode$1("th", { class: "enable-col" }, "启用", -1)),
-                  _cache[8] || (_cache[8] = _createElementVNode$1("th", { class: "name-col" }, "名称", -1)),
-                  _cache[9] || (_cache[9] = _createElementVNode$1("th", { class: "url-col" }, "API 地址", -1)),
-                  _cache[10] || (_cache[10] = _createElementVNode$1("th", { class: "action-col text-right" }, "操作", -1))
+                  _cache[5] || (_cache[5] = _createElementVNode$1("th", { class: "enable-col" }, "启用", -1)),
+                  _cache[6] || (_cache[6] = _createElementVNode$1("th", { class: "name-col" }, "名称", -1)),
+                  _cache[7] || (_cache[7] = _createElementVNode$1("th", { class: "url-col" }, "API 地址", -1)),
+                  _cache[8] || (_cache[8] = _createElementVNode$1("th", { class: "action-col text-right" }, "操作", -1))
                 ])
               ]),
               _createElementVNode$1("tbody", null, [
-                (_openBlock$1(true), _createElementBlock$1(_Fragment$1, null, _renderList(displayVendors.value, (vendor, index) => {
+                (_openBlock$1(true), _createElementBlock$1(_Fragment$1, null, _renderList$1(displayVendors.value, (vendor, index) => {
                   return (_openBlock$1(), _createElementBlock$1("tr", {
                     key: vendor.id,
                     draggable: dragMode.value,
-                    class: _normalizeClass(rowClasses(index)),
+                    class: _normalizeClass$1(rowClasses(index)),
                     onDragstart: $event => (onDragStart(index, $event)),
                     onDragover: $event => (onDragOver(index, $event)),
                     onDragleave: onDragLeave,
@@ -1741,7 +1745,7 @@ return (_ctx, _cache) => {
                     onDragend: onDragEnd
                   }, [
                     (dragMode.value)
-                      ? (_openBlock$1(), _createElementBlock$1("td", _hoisted_5$1, [
+                      ? (_openBlock$1(), _createElementBlock$1("td", _hoisted_4$1, [
                           _createVNode$1(_component_VIcon, {
                             icon: "mdi-drag-vertical",
                             size: "small",
@@ -1751,56 +1755,51 @@ return (_ctx, _cache) => {
                       : _createCommentVNode$1("", true),
                     _createElementVNode$1("td", {
                       class: "enable-col",
-                      onClick: _cache[2] || (_cache[2] = _withModifiers(() => {}, ["stop"]))
+                      onClick: _withModifiers($event => (editingId.value !== vendor.id && toggleEnabled(vendor)), ["stop"])
                     }, [
-                      (editingId.value !== vendor.id)
-                        ? (_openBlock$1(), _createBlock$1(_component_VSwitch, {
-                            key: 0,
-                            "model-value": vendor.enabled,
-                            color: "primary",
-                            "hide-details": "",
-                            density: "compact",
-                            "onUpdate:modelValue": $event => (toggleEnabled(vendor))
-                          }, null, 8, ["model-value", "onUpdate:modelValue"]))
-                        : (_openBlock$1(), _createBlock$1(_component_VSwitch, {
-                            key: 1,
-                            modelValue: editBuffer.value.enabled,
-                            "onUpdate:modelValue": _cache[1] || (_cache[1] = $event => ((editBuffer.value.enabled) = $event)),
-                            color: "primary",
-                            "hide-details": "",
-                            density: "compact"
-                          }, null, 8, ["modelValue"]))
-                    ]),
-                    _createElementVNode$1("td", _hoisted_6$1, [
+                      _createElementVNode$1("div", _hoisted_6$1, [
+                        (editingId.value !== vendor.id)
+                          ? (_openBlock$1(), _createElementBlock$1("span", {
+                              key: 0,
+                              class: _normalizeClass$1(['status-dot', vendor.enabled ? 'active' : 'inactive'])
+                            }, null, 2))
+                          : (_openBlock$1(), _createElementBlock$1("span", {
+                              key: 1,
+                              class: _normalizeClass$1(['status-dot', editBuffer.value.enabled ? 'active' : 'inactive']),
+                              onClick: _cache[1] || (_cache[1] = _withModifiers($event => (editBuffer.value.enabled = !editBuffer.value.enabled), ["stop"]))
+                            }, null, 2))
+                      ])
+                    ], 8, _hoisted_5$1),
+                    _createElementVNode$1("td", _hoisted_7$1, [
                       (editingId.value === vendor.id)
                         ? (_openBlock$1(), _createBlock$1(_component_VTextField, {
                             key: 0,
                             modelValue: editBuffer.value.name,
-                            "onUpdate:modelValue": _cache[3] || (_cache[3] = $event => ((editBuffer.value.name) = $event)),
+                            "onUpdate:modelValue": _cache[2] || (_cache[2] = $event => ((editBuffer.value.name) = $event)),
                             variant: "outlined",
                             density: "compact",
                             "hide-details": "",
                             "single-line": ""
                           }, null, 8, ["modelValue"]))
-                        : (_openBlock$1(), _createElementBlock$1("span", _hoisted_7$1, _toDisplayString$1(vendor.name), 1))
+                        : (_openBlock$1(), _createElementBlock$1("span", _hoisted_8$1, _toDisplayString$1(vendor.name), 1))
                     ]),
-                    _createElementVNode$1("td", _hoisted_8$1, [
+                    _createElementVNode$1("td", _hoisted_9$1, [
                       (editingId.value === vendor.id)
                         ? (_openBlock$1(), _createBlock$1(_component_VTextField, {
                             key: 0,
                             modelValue: editBuffer.value.url,
-                            "onUpdate:modelValue": _cache[4] || (_cache[4] = $event => ((editBuffer.value.url) = $event)),
+                            "onUpdate:modelValue": _cache[3] || (_cache[3] = $event => ((editBuffer.value.url) = $event)),
                             variant: "outlined",
                             density: "compact",
                             "hide-details": "",
                             "single-line": "",
                             placeholder: "https://api.example.com/v1"
                           }, null, 8, ["modelValue"]))
-                        : (_openBlock$1(), _createElementBlock$1("span", _hoisted_9$1, _toDisplayString$1(vendor.url), 1))
+                        : (_openBlock$1(), _createElementBlock$1("span", _hoisted_10$1, _toDisplayString$1(vendor.url), 1))
                     ]),
                     _createElementVNode$1("td", {
                       class: "action-col text-right",
-                      onClick: _cache[5] || (_cache[5] = _withModifiers(() => {}, ["stop"]))
+                      onClick: _cache[4] || (_cache[4] = _withModifiers(() => {}, ["stop"]))
                     }, [
                       (editingId.value === vendor.id)
                         ? (_openBlock$1(), _createElementBlock$1(_Fragment$1, { key: 0 }, [
@@ -1836,14 +1835,14 @@ return (_ctx, _cache) => {
                             }, null, 8, ["onClick"])
                           ], 64))
                     ])
-                  ], 42, _hoisted_4$1))
+                  ], 42, _hoisted_3$1))
                 }), 128)),
                 (!displayVendors.value.length)
-                  ? (_openBlock$1(), _createElementBlock$1("tr", _hoisted_10$1, [
+                  ? (_openBlock$1(), _createElementBlock$1("tr", _hoisted_11$1, [
                       _createElementVNode$1("td", {
                         colspan: dragMode.value ? 5 : 4,
                         class: "text-center text-medium-emphasis py-8"
-                      }, " 暂无厂商，点击\"新增\"添加 ", 8, _hoisted_11$1)
+                      }, " 暂无厂商，点击\"新增\"添加 ", 8, _hoisted_12$1)
                     ]))
                   : _createCommentVNode$1("", true)
               ])
@@ -1859,32 +1858,41 @@ return (_ctx, _cache) => {
 }
 
 };
-const VendorManager = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-40b288ca"]]);
+const VendorManager = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-8c2d85aa"]]);
 
-const {createElementVNode:_createElementVNode,resolveComponent:_resolveComponent,createVNode:_createVNode,openBlock:_openBlock,createElementBlock:_createElementBlock,createCommentVNode:_createCommentVNode,toDisplayString:_toDisplayString,createTextVNode:_createTextVNode,withCtx:_withCtx,createBlock:_createBlock,unref:_unref,Fragment:_Fragment} = await importShared('vue');
+const {createElementVNode:_createElementVNode,resolveComponent:_resolveComponent,createVNode:_createVNode,openBlock:_openBlock,createElementBlock:_createElementBlock,createCommentVNode:_createCommentVNode,toDisplayString:_toDisplayString,createTextVNode:_createTextVNode,withCtx:_withCtx,createBlock:_createBlock,unref:_unref,renderList:_renderList,Fragment:_Fragment,normalizeClass:_normalizeClass} = await importShared('vue');
 
 
-const _hoisted_1 = { class: "agenttokens-page" };
-const _hoisted_2 = {
+const _hoisted_1 = {
   key: 0,
   class: "agenttokens-header"
 };
-const _hoisted_3 = { class: "agenttokens-control-panel__row" };
-const _hoisted_4 = { class: "agenttokens-control-panel__cell agenttokens-control-panel__cell--left" };
-const _hoisted_5 = { class: "agenttokens-control-panel__cell" };
-const _hoisted_6 = { class: "agenttokens-control-panel__row" };
-const _hoisted_7 = { class: "agenttokens-control-panel__cell agenttokens-control-panel__cell--left" };
-const _hoisted_8 = { class: "config-label" };
-const _hoisted_9 = { class: "agenttokens-control-panel__limit-value" };
-const _hoisted_10 = { class: "agenttokens-control-panel__cell" };
-const _hoisted_11 = { class: "agenttokens-overview-grid" };
+const _hoisted_2 = { class: "agenttokens-control-panel__row" };
+const _hoisted_3 = { class: "agenttokens-control-panel__cell agenttokens-control-panel__cell--left" };
+const _hoisted_4 = { class: "agenttokens-control-panel__cell" };
+const _hoisted_5 = { class: "agenttokens-control-panel__row" };
+const _hoisted_6 = { class: "agenttokens-control-panel__cell agenttokens-control-panel__cell--left" };
+const _hoisted_7 = { class: "config-label" };
+const _hoisted_8 = { class: "agenttokens-control-panel__limit-value" };
+const _hoisted_9 = { class: "agenttokens-control-panel__cell" };
+const _hoisted_10 = { class: "agenttokens-overview-grid" };
+const _hoisted_11 = { class: "agenttokens-stat-card__value" };
 const _hoisted_12 = { class: "agenttokens-stat-card__value" };
-const _hoisted_13 = { class: "agenttokens-stat-card__value" };
-const _hoisted_14 = { class: "agenttokens-stat-card__hint" };
-const _hoisted_15 = { class: "agenttokens-tabs-row" };
-const _hoisted_16 = { class: "agenttokens-table-actions" };
+const _hoisted_13 = { class: "agenttokens-stat-card__hint" };
+const _hoisted_14 = {
+  key: 0,
+  class: "mobile-nav-bar"
+};
+const _hoisted_15 = { class: "mobile-tabs" };
+const _hoisted_16 = ["onClick"];
+const _hoisted_17 = { class: "mobile-actions" };
+const _hoisted_18 = {
+  key: 1,
+  class: "agenttokens-tabs-row"
+};
+const _hoisted_19 = { class: "agenttokens-table-actions" };
 
-const {computed,nextTick,ref,watch} = await importShared('vue');
+const {computed,nextTick,onBeforeUnmount,onMounted,ref,watch} = await importShared('vue');
 
 
 const _sfc_main = {
@@ -1961,6 +1969,33 @@ const dragMode = ref(false);
 const importFileInput = ref(null);
 // 单一数据源：表格始终绑定此数组，拖拽/编辑都直接操作它
 const localProviders = ref([]);
+// 厂商管理 ref
+const vendorRef = ref(null);
+// 厂商拖拽模式状态（镜像 VendorManager 内部状态）
+const vendorDragMode = ref(false);
+// 移动端判定：UA + 触控 + 窗口宽度
+const isMobile = ref(false);
+// 移动端 Tab 列表
+const mobileTabs = [
+  { value: 'usage', label: '总览' },
+  { value: 'config', label: '供应商' },
+  { value: 'vendors', label: '厂商' },
+];
+
+function checkMobile() {
+  isMobile.value = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+    || window.innerWidth <= 768
+    || ('ontouchstart' in window);
+}
+
+onMounted(() => {
+  checkMobile();
+  window.addEventListener('resize', checkMobile);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', checkMobile);
+});
 
 const configValue = computed(() => props.config || { enabled: false, show_sidebar_nav: true, max_failures: 3, providers: [] });
 const providers = computed(() => (Array.isArray(configValue.value.providers) ? configValue.value.providers : []));
@@ -2215,6 +2250,30 @@ function resetAllUsage() {
   emit('reset-all-usage');
 }
 
+// 切换厂商拖拽排序模式
+function toggleVendorDragMode() {
+  vendorRef.value?.toggleDragMode();
+}
+
+// 从总览页点击名称跳转到供应商 Tab 并打开编辑弹窗
+async function openVendorEditFromOverview(row) {
+  if (!row || !row.id) {
+    showTestFeedback('error', '供应商数据异常，无法编辑');
+    return
+  }
+  // 切换到供应商 Tab
+  activeTab.value = 'config';
+  // 等待 Tab 切换完成后再打开弹窗
+  await nextTick();
+  // 在 localProviders 中查找对应供应商
+  const index = localProviders.value.findIndex(p => p.id === row.id);
+  if (index < 0) {
+    showTestFeedback('error', `未找到供应商 [${row.name || row.id}]，可能已被删除`);
+    return
+  }
+  editProvider(index);
+}
+
 return (_ctx, _cache) => {
   const _component_VSpacer = _resolveComponent("VSpacer");
   const _component_VBtn = _resolveComponent("VBtn");
@@ -2230,10 +2289,12 @@ return (_ctx, _cache) => {
   const _component_VWindowItem = _resolveComponent("VWindowItem");
   const _component_VWindow = _resolveComponent("VWindow");
 
-  return (_openBlock(), _createElementBlock("div", _hoisted_1, [
+  return (_openBlock(), _createElementBlock("div", {
+    class: _normalizeClass(["agenttokens-page", { 'is-mobile': isMobile.value }])
+  }, [
     (!__props.hideTitle)
-      ? (_openBlock(), _createElementBlock("div", _hoisted_2, [
-          _cache[12] || (_cache[12] = _createElementVNode("h2", { class: "text-2xl font-bold leading-7 text-gray-100 truncate sm:text-3xl sm:leading-9" }, [
+      ? (_openBlock(), _createElementBlock("div", _hoisted_1, [
+          _cache[13] || (_cache[13] = _createElementVNode("h2", { class: "text-2xl font-bold leading-7 text-gray-100 truncate sm:text-3xl sm:leading-9" }, [
             _createElementVNode("span", { class: "text-moviepilot" }, "Agent Tokens 管理")
           ], -1)),
           _createVNode(_component_VSpacer),
@@ -2292,9 +2353,9 @@ return (_ctx, _cache) => {
       class: "agenttokens-control-panel"
     }, {
       default: _withCtx(() => [
-        _createElementVNode("div", _hoisted_3, [
-          _createElementVNode("div", _hoisted_4, [
-            _cache[13] || (_cache[13] = _createElementVNode("span", { class: "switch-label" }, "启用插件", -1)),
+        _createElementVNode("div", _hoisted_2, [
+          _createElementVNode("div", _hoisted_3, [
+            _cache[14] || (_cache[14] = _createElementVNode("span", { class: "switch-label" }, "启用插件", -1)),
             _createVNode(_component_VSwitch, {
               modelValue: configValue.value.enabled,
               "onUpdate:modelValue": _cache[3] || (_cache[3] = $event => ((configValue.value.enabled) = $event)),
@@ -2303,8 +2364,8 @@ return (_ctx, _cache) => {
               inset: ""
             }, null, 8, ["modelValue"])
           ]),
-          _createElementVNode("div", _hoisted_5, [
-            _cache[14] || (_cache[14] = _createElementVNode("span", { class: "switch-label" }, "侧边栏入口", -1)),
+          _createElementVNode("div", _hoisted_4, [
+            _cache[15] || (_cache[15] = _createElementVNode("span", { class: "switch-label" }, "侧边栏入口", -1)),
             _createVNode(_component_VSwitch, {
               modelValue: configValue.value.show_sidebar_nav,
               "onUpdate:modelValue": _cache[4] || (_cache[4] = $event => ((configValue.value.show_sidebar_nav) = $event)),
@@ -2314,20 +2375,20 @@ return (_ctx, _cache) => {
             }, null, 8, ["modelValue"])
           ])
         ]),
-        _createElementVNode("div", _hoisted_6, [
-          _createElementVNode("div", _hoisted_7, [
-            _createElementVNode("div", _hoisted_8, [
+        _createElementVNode("div", _hoisted_5, [
+          _createElementVNode("div", _hoisted_6, [
+            _createElementVNode("div", _hoisted_7, [
               _createVNode(_component_VIcon, {
                 icon: "mdi-database-outline",
                 color: "info",
                 size: "small"
               }),
-              _cache[15] || (_cache[15] = _createElementVNode("span", null, "限量总额度", -1))
+              _cache[16] || (_cache[16] = _createElementVNode("span", null, "限量总额度", -1))
             ]),
-            _createElementVNode("span", _hoisted_9, _toDisplayString(displaySummary.value.total_limit ? _unref(formatTokens)(displaySummary.value.total_limit) : '不限'), 1)
+            _createElementVNode("span", _hoisted_8, _toDisplayString(displaySummary.value.total_limit ? _unref(formatTokens)(displaySummary.value.total_limit) : '不限'), 1)
           ]),
-          _createElementVNode("div", _hoisted_10, [
-            _cache[16] || (_cache[16] = _createElementVNode("span", { class: "config-label" }, "失败切换阈值", -1)),
+          _createElementVNode("div", _hoisted_9, [
+            _cache[17] || (_cache[17] = _createElementVNode("span", { class: "config-label" }, "失败切换阈值", -1)),
             _createVNode(_component_VTextField, {
               modelValue: configValue.value.max_failures,
               "onUpdate:modelValue": _cache[5] || (_cache[5] = $event => ((configValue.value.max_failures) = $event)),
@@ -2346,7 +2407,7 @@ return (_ctx, _cache) => {
       ]),
       _: 1
     }),
-    _createElementVNode("div", _hoisted_11, [
+    _createElementVNode("div", _hoisted_10, [
       _createVNode(UsageOverviewCard, {
         class: "agenttokens-overview-card",
         summary: displaySummary.value
@@ -2362,8 +2423,8 @@ return (_ctx, _cache) => {
             color: "success"
           }),
           _createElementVNode("div", null, [
-            _cache[17] || (_cache[17] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "可用供应商", -1)),
-            _createElementVNode("div", _hoisted_12, _toDisplayString(displaySummary.value.available_count || 0) + " / " + _toDisplayString(displaySummary.value.enabled_count || 0), 1)
+            _cache[18] || (_cache[18] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "可用供应商", -1)),
+            _createElementVNode("div", _hoisted_11, _toDisplayString(displaySummary.value.available_count || 0) + " / " + _toDisplayString(displaySummary.value.enabled_count || 0), 1)
           ])
         ]),
         _: 1
@@ -2379,9 +2440,9 @@ return (_ctx, _cache) => {
             color: "primary"
           }),
           _createElementVNode("div", null, [
-            _cache[18] || (_cache[18] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "累计使用", -1)),
-            _createElementVNode("div", _hoisted_13, _toDisplayString(_unref(formatTokens)(displaySummary.value.total_used)), 1),
-            _createElementVNode("div", _hoisted_14, " 限量 " + _toDisplayString(_unref(formatTokens)(limitedUsed.value)) + " / 不限量 " + _toDisplayString(_unref(formatTokens)(unlimitedUsed.value)), 1)
+            _cache[19] || (_cache[19] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "累计使用", -1)),
+            _createElementVNode("div", _hoisted_12, _toDisplayString(_unref(formatTokens)(displaySummary.value.total_used)), 1),
+            _createElementVNode("div", _hoisted_13, " 限量 " + _toDisplayString(_unref(formatTokens)(limitedUsed.value)) + " / 不限量 " + _toDisplayString(_unref(formatTokens)(unlimitedUsed.value)), 1)
           ])
         ]),
         _: 1
@@ -2393,112 +2454,298 @@ return (_ctx, _cache) => {
       class: "agenttokens-content-panel"
     }, {
       default: _withCtx(() => [
-        _createElementVNode("div", _hoisted_15, [
-          _createVNode(_component_VTabs, {
-            modelValue: activeTab.value,
-            "onUpdate:modelValue": _cache[6] || (_cache[6] = $event => ((activeTab).value = $event)),
-            density: "comfortable"
-          }, {
-            default: _withCtx(() => [
-              _createVNode(_component_VTab, { value: "usage" }, {
-                default: _withCtx(() => [...(_cache[19] || (_cache[19] = [
-                  _createTextVNode("总览", -1)
-                ]))]),
-                _: 1
-              }),
-              _createVNode(_component_VTab, { value: "config" }, {
-                default: _withCtx(() => [...(_cache[20] || (_cache[20] = [
-                  _createTextVNode("供应商", -1)
-                ]))]),
-                _: 1
-              }),
-              _createVNode(_component_VTab, { value: "vendors" }, {
-                default: _withCtx(() => [...(_cache[21] || (_cache[21] = [
-                  _createTextVNode("厂商", -1)
-                ]))]),
-                _: 1
-              })
-            ]),
-            _: 1
-          }, 8, ["modelValue"]),
-          _createElementVNode("div", _hoisted_16, [
-            (activeTab.value === 'usage')
-              ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [
-                  _createVNode(_component_VBtn, {
-                    "prepend-icon": "mdi-export",
-                    color: "primary",
-                    variant: "tonal",
-                    onClick: handleExport
-                  }, {
-                    default: _withCtx(() => [...(_cache[22] || (_cache[22] = [
-                      _createTextVNode(" 导出配置 ", -1)
+        (isMobile.value)
+          ? (_openBlock(), _createElementBlock("div", _hoisted_14, [
+              _createElementVNode("div", _hoisted_15, [
+                (_openBlock(), _createElementBlock(_Fragment, null, _renderList(mobileTabs, (tab) => {
+                  return _createElementVNode("button", {
+                    key: tab.value,
+                    class: _normalizeClass(['mobile-tab-btn', { active: activeTab.value === tab.value }]),
+                    onClick: $event => (activeTab.value = tab.value)
+                  }, _toDisplayString(tab.label), 11, _hoisted_16)
+                }), 64))
+              ]),
+              _createElementVNode("div", _hoisted_17, [
+                (activeTab.value === 'usage')
+                  ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [
+                      _createVNode(_component_VBtn, {
+                        size: "x-small",
+                        variant: "text",
+                        color: "primary",
+                        onClick: handleExport,
+                        class: "mobile-action-btn"
+                      }, {
+                        default: _withCtx(() => [
+                          _createVNode(_component_VIcon, { size: "18" }, {
+                            default: _withCtx(() => [...(_cache[20] || (_cache[20] = [
+                              _createTextVNode("mdi-export", -1)
+                            ]))]),
+                            _: 1
+                          }),
+                          _cache[21] || (_cache[21] = _createElementVNode("span", null, "导出", -1))
+                        ]),
+                        _: 1
+                      }),
+                      _createVNode(_component_VBtn, {
+                        size: "x-small",
+                        variant: "text",
+                        color: "primary",
+                        onClick: handleImportClick,
+                        class: "mobile-action-btn"
+                      }, {
+                        default: _withCtx(() => [
+                          _createVNode(_component_VIcon, { size: "18" }, {
+                            default: _withCtx(() => [...(_cache[22] || (_cache[22] = [
+                              _createTextVNode("mdi-import", -1)
+                            ]))]),
+                            _: 1
+                          }),
+                          _cache[23] || (_cache[23] = _createElementVNode("span", null, "导入", -1))
+                        ]),
+                        _: 1
+                      }),
+                      _createElementVNode("input", {
+                        ref_key: "importFileInput",
+                        ref: importFileInput,
+                        type: "file",
+                        accept: ".json",
+                        style: {"display":"none"},
+                        onChange: handleImportFile
+                      }, null, 544)
+                    ], 64))
+                  : _createCommentVNode("", true),
+                (activeTab.value === 'config')
+                  ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [
+                      _createVNode(_component_VBtn, {
+                        size: "x-small",
+                        variant: "text",
+                        color: "primary",
+                        onClick: addProvider,
+                        class: "mobile-action-btn"
+                      }, {
+                        default: _withCtx(() => [
+                          _createVNode(_component_VIcon, { size: "18" }, {
+                            default: _withCtx(() => [...(_cache[24] || (_cache[24] = [
+                              _createTextVNode("mdi-plus", -1)
+                            ]))]),
+                            _: 1
+                          }),
+                          _cache[25] || (_cache[25] = _createElementVNode("span", null, "新增", -1))
+                        ]),
+                        _: 1
+                      }),
+                      _createVNode(_component_VBtn, {
+                        size: "x-small",
+                        variant: dragMode.value ? 'flat' : 'text',
+                        color: dragMode.value ? 'warning' : 'default',
+                        onClick: toggleDragMode,
+                        class: "mobile-action-btn"
+                      }, {
+                        default: _withCtx(() => [
+                          _createVNode(_component_VIcon, { size: "18" }, {
+                            default: _withCtx(() => [...(_cache[26] || (_cache[26] = [
+                              _createTextVNode("mdi-sort", -1)
+                            ]))]),
+                            _: 1
+                          }),
+                          _createElementVNode("span", null, _toDisplayString(dragMode.value ? '完成' : '排序'), 1)
+                        ]),
+                        _: 1
+                      }, 8, ["variant", "color"]),
+                      _createVNode(_component_VBtn, {
+                        size: "x-small",
+                        variant: "text",
+                        color: "warning",
+                        onClick: resetAllUsage,
+                        class: "mobile-action-btn"
+                      }, {
+                        default: _withCtx(() => [
+                          _createVNode(_component_VIcon, { size: "18" }, {
+                            default: _withCtx(() => [...(_cache[27] || (_cache[27] = [
+                              _createTextVNode("mdi-backup-restore", -1)
+                            ]))]),
+                            _: 1
+                          }),
+                          _cache[28] || (_cache[28] = _createElementVNode("span", null, "重置", -1))
+                        ]),
+                        _: 1
+                      })
+                    ], 64))
+                  : _createCommentVNode("", true),
+                (activeTab.value === 'vendors')
+                  ? (_openBlock(), _createElementBlock(_Fragment, { key: 2 }, [
+                      _createVNode(_component_VBtn, {
+                        size: "x-small",
+                        variant: "text",
+                        color: "primary",
+                        onClick: vendorRef.value?.addVendor,
+                        class: "mobile-action-btn"
+                      }, {
+                        default: _withCtx(() => [
+                          _createVNode(_component_VIcon, { size: "18" }, {
+                            default: _withCtx(() => [...(_cache[29] || (_cache[29] = [
+                              _createTextVNode("mdi-plus", -1)
+                            ]))]),
+                            _: 1
+                          }),
+                          _cache[30] || (_cache[30] = _createElementVNode("span", null, "新增", -1))
+                        ]),
+                        _: 1
+                      }, 8, ["onClick"]),
+                      _createVNode(_component_VBtn, {
+                        size: "x-small",
+                        variant: vendorDragMode.value ? 'flat' : 'text',
+                        color: vendorDragMode.value ? 'warning' : 'default',
+                        onClick: toggleVendorDragMode,
+                        class: "mobile-action-btn"
+                      }, {
+                        default: _withCtx(() => [
+                          _createVNode(_component_VIcon, { size: "18" }, {
+                            default: _withCtx(() => [...(_cache[31] || (_cache[31] = [
+                              _createTextVNode("mdi-sort", -1)
+                            ]))]),
+                            _: 1
+                          }),
+                          _createElementVNode("span", null, _toDisplayString(vendorDragMode.value ? '完成' : '排序'), 1)
+                        ]),
+                        _: 1
+                      }, 8, ["variant", "color"])
+                    ], 64))
+                  : _createCommentVNode("", true)
+              ])
+            ]))
+          : (_openBlock(), _createElementBlock("div", _hoisted_18, [
+              _createVNode(_component_VTabs, {
+                modelValue: activeTab.value,
+                "onUpdate:modelValue": _cache[6] || (_cache[6] = $event => ((activeTab).value = $event)),
+                density: "comfortable"
+              }, {
+                default: _withCtx(() => [
+                  _createVNode(_component_VTab, { value: "usage" }, {
+                    default: _withCtx(() => [...(_cache[32] || (_cache[32] = [
+                      _createTextVNode("总览", -1)
                     ]))]),
                     _: 1
                   }),
-                  _createVNode(_component_VBtn, {
-                    "prepend-icon": "mdi-import",
-                    color: "primary",
-                    variant: "tonal",
-                    onClick: handleImportClick
-                  }, {
-                    default: _withCtx(() => [...(_cache[23] || (_cache[23] = [
-                      _createTextVNode(" 导入配置 ", -1)
+                  _createVNode(_component_VTab, { value: "config" }, {
+                    default: _withCtx(() => [...(_cache[33] || (_cache[33] = [
+                      _createTextVNode("供应商", -1)
                     ]))]),
                     _: 1
                   }),
-                  _createElementVNode("input", {
-                    ref_key: "importFileInput",
-                    ref: importFileInput,
-                    type: "file",
-                    accept: ".json",
-                    style: {"display":"none"},
-                    onChange: handleImportFile
-                  }, null, 544)
-                ], 64))
-              : _createCommentVNode("", true),
-            (activeTab.value === 'config')
-              ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [
-                  _createVNode(_component_VBtn, {
-                    "prepend-icon": "mdi-plus",
-                    color: "primary",
-                    variant: "tonal",
-                    onClick: addProvider
-                  }, {
-                    default: _withCtx(() => [...(_cache[24] || (_cache[24] = [
-                      _createTextVNode("新增", -1)
-                    ]))]),
-                    _: 1
-                  }),
-                  _createVNode(_component_VBtn, {
-                    "prepend-icon": "mdi-sort",
-                    color: dragMode.value ? 'warning' : 'default',
-                    variant: dragMode.value ? 'flat' : 'tonal',
-                    onClick: toggleDragMode
-                  }, {
-                    default: _withCtx(() => [
-                      _createTextVNode(_toDisplayString(dragMode.value ? '完成排序' : '排序'), 1)
-                    ]),
-                    _: 1
-                  }, 8, ["color", "variant"]),
-                  _createVNode(_component_VBtn, {
-                    "prepend-icon": "mdi-backup-restore",
-                    color: "warning",
-                    variant: "tonal",
-                    onClick: resetAllUsage
-                  }, {
-                    default: _withCtx(() => [...(_cache[25] || (_cache[25] = [
-                      _createTextVNode(" 重置用量 ", -1)
+                  _createVNode(_component_VTab, { value: "vendors" }, {
+                    default: _withCtx(() => [...(_cache[34] || (_cache[34] = [
+                      _createTextVNode("厂商", -1)
                     ]))]),
                     _: 1
                   })
-                ], 64))
-              : _createCommentVNode("", true)
-          ])
-        ]),
+                ]),
+                _: 1
+              }, 8, ["modelValue"]),
+              _createElementVNode("div", _hoisted_19, [
+                (activeTab.value === 'usage')
+                  ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [
+                      _createVNode(_component_VBtn, {
+                        "prepend-icon": "mdi-export",
+                        color: "primary",
+                        variant: "tonal",
+                        onClick: handleExport
+                      }, {
+                        default: _withCtx(() => [...(_cache[35] || (_cache[35] = [
+                          _createTextVNode(" 导出配置 ", -1)
+                        ]))]),
+                        _: 1
+                      }),
+                      _createVNode(_component_VBtn, {
+                        "prepend-icon": "mdi-import",
+                        color: "primary",
+                        variant: "tonal",
+                        onClick: handleImportClick
+                      }, {
+                        default: _withCtx(() => [...(_cache[36] || (_cache[36] = [
+                          _createTextVNode(" 导入配置 ", -1)
+                        ]))]),
+                        _: 1
+                      }),
+                      _createElementVNode("input", {
+                        ref_key: "importFileInput",
+                        ref: importFileInput,
+                        type: "file",
+                        accept: ".json",
+                        style: {"display":"none"},
+                        onChange: handleImportFile
+                      }, null, 544)
+                    ], 64))
+                  : _createCommentVNode("", true),
+                (activeTab.value === 'config')
+                  ? (_openBlock(), _createElementBlock(_Fragment, { key: 1 }, [
+                      _createVNode(_component_VBtn, {
+                        "prepend-icon": "mdi-plus",
+                        color: "primary",
+                        variant: "tonal",
+                        onClick: addProvider
+                      }, {
+                        default: _withCtx(() => [...(_cache[37] || (_cache[37] = [
+                          _createTextVNode(" 新增 ", -1)
+                        ]))]),
+                        _: 1
+                      }),
+                      _createVNode(_component_VBtn, {
+                        "prepend-icon": "mdi-sort",
+                        color: dragMode.value ? 'warning' : 'default',
+                        variant: dragMode.value ? 'flat' : 'tonal',
+                        onClick: toggleDragMode
+                      }, {
+                        default: _withCtx(() => [
+                          _createTextVNode(_toDisplayString(dragMode.value ? '完成排序' : '排序'), 1)
+                        ]),
+                        _: 1
+                      }, 8, ["color", "variant"]),
+                      _createVNode(_component_VBtn, {
+                        "prepend-icon": "mdi-backup-restore",
+                        color: "warning",
+                        variant: "tonal",
+                        onClick: resetAllUsage
+                      }, {
+                        default: _withCtx(() => [...(_cache[38] || (_cache[38] = [
+                          _createTextVNode(" 重置用量 ", -1)
+                        ]))]),
+                        _: 1
+                      })
+                    ], 64))
+                  : _createCommentVNode("", true),
+                (activeTab.value === 'vendors')
+                  ? (_openBlock(), _createElementBlock(_Fragment, { key: 2 }, [
+                      _createVNode(_component_VBtn, {
+                        "prepend-icon": "mdi-plus",
+                        color: "primary",
+                        variant: "tonal",
+                        onClick: vendorRef.value?.addVendor
+                      }, {
+                        default: _withCtx(() => [...(_cache[39] || (_cache[39] = [
+                          _createTextVNode(" 新增 ", -1)
+                        ]))]),
+                        _: 1
+                      }, 8, ["onClick"]),
+                      _createVNode(_component_VBtn, {
+                        "prepend-icon": "mdi-sort",
+                        color: vendorDragMode.value ? 'warning' : 'default',
+                        variant: vendorDragMode.value ? 'flat' : 'tonal',
+                        onClick: toggleVendorDragMode
+                      }, {
+                        default: _withCtx(() => [
+                          _createTextVNode(_toDisplayString(vendorDragMode.value ? '完成排序' : '排序'), 1)
+                        ]),
+                        _: 1
+                      }, 8, ["color", "variant"])
+                    ], 64))
+                  : _createCommentVNode("", true)
+              ])
+            ])),
         _createVNode(_component_VDivider),
         _createVNode(_component_VWindow, {
           modelValue: activeTab.value,
-          "onUpdate:modelValue": _cache[8] || (_cache[8] = $event => ((activeTab).value = $event)),
+          "onUpdate:modelValue": _cache[9] || (_cache[9] = $event => ((activeTab).value = $event)),
           touch: false,
           class: "agenttokens-window"
         }, {
@@ -2510,7 +2757,8 @@ return (_ctx, _cache) => {
                   "active-provider-id": __props.activeProviderId,
                   "failed-provider-ids": failedProviderIds.value,
                   onReset: resetUsage,
-                  onSelect: selectProvider
+                  onSelect: selectProvider,
+                  onOpenVendorEdit: openVendorEditFromOverview
                 }, null, 8, ["provider-rows", "active-provider-id", "failed-provider-ids"])
               ]),
               _: 1
@@ -2536,11 +2784,14 @@ return (_ctx, _cache) => {
             _createVNode(_component_VWindowItem, { value: "vendors" }, {
               default: _withCtx(() => [
                 _createVNode(VendorManager, {
+                  ref_key: "vendorRef",
+                  ref: vendorRef,
                   vendors: props.vendors,
                   api: props.api,
                   "plugin-base": props.pluginBase,
                   loading: __props.loading,
-                  onRefresh: _cache[7] || (_cache[7] = $event => (emit('refresh')))
+                  onRefresh: _cache[7] || (_cache[7] = $event => (emit('refresh'))),
+                  onDragModeChange: _cache[8] || (_cache[8] = $event => (vendorDragMode.value = $event))
                 }, null, 8, ["vendors", "api", "plugin-base", "loading"])
               ]),
               _: 1
@@ -2553,7 +2804,7 @@ return (_ctx, _cache) => {
     }),
     _createVNode(ProviderEditorDialog, {
       modelValue: showEditor.value,
-      "onUpdate:modelValue": _cache[9] || (_cache[9] = $event => ((showEditor).value = $event)),
+      "onUpdate:modelValue": _cache[10] || (_cache[10] = $event => ((showEditor).value = $event)),
       "retain-focus": false,
       provider: editedProvider.value,
       "editor-index": editorIndex.value,
@@ -2561,14 +2812,14 @@ return (_ctx, _cache) => {
       vendors: props.vendors,
       onAfterLeave: resetForm,
       onCommit: commitProvider,
-      onQueryModels: _cache[10] || (_cache[10] = payload => emit('query-models', payload)),
-      onTestConnection: _cache[11] || (_cache[11] = payload => emit('test-connection', payload))
+      onQueryModels: _cache[11] || (_cache[11] = payload => emit('query-models', payload)),
+      onTestConnection: _cache[12] || (_cache[12] = payload => emit('test-connection', payload))
     }, null, 8, ["modelValue", "provider", "editor-index", "existing-providers", "vendors"])
-  ]))
+  ], 2))
 }
 }
 
 };
-const AgentTokensManager = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-c7470a0c"]]);
+const AgentTokensManager = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-c5ded6a3"]]);
 
 export { AgentTokensManager as A };

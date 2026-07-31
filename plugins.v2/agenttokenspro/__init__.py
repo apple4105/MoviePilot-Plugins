@@ -26,7 +26,7 @@ class AgentTokensPro(_PluginBase):
     plugin_name = "Agent Tokens Pro"
     plugin_desc = "管理多平台免费 Token 配额，按优先级自动切换 Agent LLM 供应商。"
     plugin_icon = "agentresourceofficer.png"
-    plugin_version = "0.0.4"
+    plugin_version = "0.0.5"
     plugin_author = "apple4105"
     author_url = "https://github.com/apple4105"
     plugin_config_prefix = "agenttokenspro_"
@@ -38,6 +38,11 @@ class AgentTokensPro(_PluginBase):
 
     # 失败自动切换：连续失败次数达到阈值后跳过该供应商。
     DEFAULT_MAX_FAILURES = 3
+
+    @property
+    def name(self) -> str:
+        """兼容框架 event.py 中 plugin.name 访问（_PluginBase 仅有 get_name() 方法）。"""
+        return self.plugin_name
 
     def init_plugin(self, config: dict = None):
         """
@@ -106,6 +111,13 @@ class AgentTokensPro(_PluginBase):
                 "methods": ["POST"],
                 "auth": "bear",
                 "summary": "重置指定供应商用量",
+            },
+            {
+                "path": "/usage/reset_failures",
+                "endpoint": self.reset_failures_api,
+                "methods": ["POST"],
+                "auth": "bear",
+                "summary": "重置指定供应商失败计数",
             },
             {
                 "path": "/test-connection",
@@ -441,12 +453,14 @@ class AgentTokensPro(_PluginBase):
         """
         rows = self._provider_status_rows()
         enabled_rows = [row for row in rows if row.get("enabled")]
+        max_failures = getattr(self, "_max_failures", self.DEFAULT_MAX_FAILURES)
         available_rows = [
             row for row in enabled_rows
             if not row["usage"].get("exhausted")
             and row.get("api_key")
             and row.get("model")
             and row.get("base_url")
+            and row["usage"].get("failure_count", 0) < max_failures
         ]
         limited_rows = [
             row for row in rows
@@ -644,6 +658,13 @@ class AgentTokensPro(_PluginBase):
             if active_provider_id and isinstance(active_provider_id, str):
                 provider_ids = {provider.get("id") for provider in (self._providers or [])}
                 if active_provider_id in provider_ids:
+                    old_active_id = getattr(self, "_active_provider_id", None)
+                    if old_active_id != active_provider_id:
+                        old_provider = next((p for p in self._providers if p.get("id") == old_active_id), None)
+                        old_name = old_provider.get("name", old_active_id) if old_provider else (old_active_id or "系统默认")
+                        new_provider = next((p for p in self._providers if p.get("id") == active_provider_id), None)
+                        new_name = new_provider.get("name", active_provider_id) if new_provider else active_provider_id
+                        self._notify_switch(old_name, new_name, "手动切换", is_manual=True)
                     self._active_provider_id = active_provider_id
                     self._manual_override = True
                     logger.info(f"前端手动切换活跃供应商为: {active_provider_id}（已锁定，禁止自动覆盖）")
@@ -680,15 +701,34 @@ class AgentTokensPro(_PluginBase):
             headers["User-Agent"] = provider.get("user_agent")
         try:
             response = requests.get(f"{base_url}/models", headers=headers, timeout=20)
-            # 严格校验鉴权状态码
-            if response.status_code == 401:
-                return schemas.Response(success=False, message="401 Unauthorized - API Key 无效或已过期")
-            if response.status_code == 402:
-                return schemas.Response(success=False, message="402 Payment Required - 账户欠费或配额已用完")
-            if response.status_code == 403:
-                return schemas.Response(success=False, message="403 Forbidden - 无权限访问该接口")
-            response.raise_for_status()
+            # 严格断言：任何 HTTP >= 400 一律判定失败
+            if response.status_code >= 400:
+                status_map = {
+                    400: "400 Bad Request - 请求格式错误或接口不支持",
+                    401: "401 Unauthorized - API Key 无效或已过期",
+                    402: "402 Payment Required - 账户欠费或配额已用完",
+                    403: "403 Forbidden - 无权限访问该接口",
+                    404: "404 Not Found - /models 接口不存在",
+                    429: "429 Too Many Requests - 请求频率超限",
+                }
+                msg = status_map.get(response.status_code, f"HTTP {response.status_code} - 服务器返回错误")
+                try:
+                    body = response.json()
+                    if isinstance(body, dict) and body.get("error"):
+                        err_obj = body["error"]
+                        err_msg = err_obj.get("message", str(err_obj)) if isinstance(err_obj, dict) else str(err_obj)
+                        msg = f"{msg}（{err_msg}）"
+                except Exception:
+                    pass
+                return schemas.Response(success=False, message=msg)
+            if response.status_code != 200:
+                return schemas.Response(success=False, message=f"HTTP {response.status_code} - 异常状态码")
             data = response.json()
+            # 检查响应体中的 error 字段
+            if isinstance(data, dict) and data.get("error"):
+                err_obj = data["error"]
+                err_msg = err_obj.get("message", str(err_obj)) if isinstance(err_obj, dict) else str(err_obj)
+                return schemas.Response(success=False, message=f"获取模型列表失败: {err_msg}")
             models = data.get("data", data) if isinstance(data, dict) else data
             model_ids = []
             if isinstance(models, list):
@@ -722,6 +762,23 @@ class AgentTokensPro(_PluginBase):
             usage = self._load_usage()
             usage.pop(provider_id, None)
             self._save_usage(usage)
+        return schemas.Response(success=True, data=self.get_status().data)
+
+    def reset_failures_api(self, payload: Optional[dict] = Body(default=None)) -> schemas.Response:
+        """
+        仅重置指定供应商的失败计数和最后错误，保留用量统计。
+        """
+        payload = payload or {}
+        provider_id = self._clean_text(payload.get("provider_id"))
+        if not provider_id:
+            return schemas.Response(success=False, message="缺少 provider_id")
+        with self._usage_lock:
+            usage = self._load_usage()
+            record = usage.get(provider_id)
+            if record:
+                record["failure_count"] = 0
+                record["last_error"] = None
+                self._save_usage(usage)
         return schemas.Response(success=True, data=self.get_status().data)
 
     def reset_all_usage_api(self) -> schemas.Response:
@@ -865,7 +922,7 @@ class AgentTokensPro(_PluginBase):
 
     # ---- 供应商切换通知防轰炸 ----
 
-    def _notify_switch(self, old_name: str, new_name: str, reason: str):
+    def _notify_switch(self, old_name: str, new_name: str, reason: str, is_manual: bool = False):
         """
         仅当真正切换到新供应商、且距上次通知超过 60 秒时才发送系统通知，防止通知轰炸。
         """
@@ -876,107 +933,367 @@ class AgentTokensPro(_PluginBase):
             return
         self._last_switch_notify_time = now
         self._last_notified_provider_id = new_name or old_name
-        title = "【AgentTokens】自动切换供应商"
-        text = f"供应商 [{old_name}] 不可用（{reason}），已自动切换到 [{new_name}]"
+        if is_manual:
+            title = "【AgentTokens】手动切换供应商"
+            text = f"供应商 [{old_name}] → [{new_name}]（{reason}）"
+        else:
+            title = "【AgentTokens】自动切换供应商"
+            text = f"供应商 [{old_name}] 不可用（{reason}），已自动切换到 [{new_name}]"
         self.post_message(
             mtype=schemas.NotificationType.Plugin,
             title=title,
             text=text,
         )
 
+    @staticmethod
+    def _extract_error_detail(resp) -> str:
+        """从 HTTP 响应中提取错误详情文本。"""
+        try:
+            body = resp.json()
+            if isinstance(body, dict) and body.get("error"):
+                err_obj = body["error"]
+                return err_obj.get("message", str(err_obj)) if isinstance(err_obj, dict) else str(err_obj)
+        except Exception:
+            if resp.text:
+                return resp.text[:300]
+        return ""
+
+    @staticmethod
+    def _status_brief(status_code: int) -> str:
+        """HTTP 状态码 → 简短描述。"""
+        status_map = {
+            400: "400 Bad Request",
+            401: "401 Unauthorized",
+            402: "402 Payment Required",
+            403: "403 Forbidden",
+            404: "404 Not Found",
+            422: "422 Unprocessable Entity",
+            429: "429 Too Many Requests",
+            500: "500 Internal Server Error",
+            502: "502 Bad Gateway",
+            503: "503 Service Unavailable",
+        }
+        return status_map.get(status_code, f"HTTP {status_code}")
+
+    def _mark_provider_faulty(self, provider_id: str, error_message: str, hard_failure: bool = False) -> None:
+        """
+        将指定供应商标记为故障。
+
+        - hard_failure=False（默认）：递增 failure_count，记录 last_error。
+        - hard_failure=True：直接将 failure_count 设为 max_failures 阈值，
+          使该供应商立即被跳过。用于测试连通性返回 HTTP >= 400 等硬故障场景。
+        """
+        if not provider_id:
+            return
+        with self._usage_lock:
+            usage = self._load_usage()
+            record = usage.get(provider_id, {})
+            max_failures = getattr(self, "_max_failures", self.DEFAULT_MAX_FAILURES)
+            if hard_failure:
+                record["failure_count"] = max_failures
+                logger.warning(
+                    f"Agent Tokens 供应商 [{provider_id}] 硬故障，"
+                    f"failure_count 直接设为 {max_failures}：{error_message[:200] if error_message else ''}"
+                )
+            else:
+                record["failure_count"] = record.get("failure_count", 0) + 1
+            record["last_error"] = error_message[:500] if error_message else None
+            usage[provider_id] = record
+            self._save_usage(usage)
+
+    def _kick_active_provider_if_faulty(self, provider_id: str) -> None:
+        """
+        如果指定供应商是当前活跃供应商，将其从活跃状态中踢出。
+        清除手动锁定，触发下次 select_llm_provider 时自动选择新供应商。
+        """
+        if not provider_id:
+            return
+        current_active_id = getattr(self, "_active_provider_id", None)
+        if current_active_id != provider_id:
+            return
+
+        old_provider = next((p for p in getattr(self, "_providers", []) if p.get("id") == provider_id), None)
+        old_name = old_provider.get("name", provider_id) if old_provider else provider_id
+
+        # 清除活跃状态和手动锁定
+        self._active_provider_id = None
+        self._manual_override = False
+        logger.warning(
+            f"Agent Tokens 活跃供应商 [{old_name}] 被踢出（测试连通性硬故障）"
+        )
+
+        # 尝试立即选择新供应商
+        new_provider = self._select_provider()
+        if new_provider:
+            self._active_provider_id = new_provider.get("id")
+            new_name = new_provider.get("name", new_provider.get("id"))
+            logger.info(f"Agent Tokens 自动切换到新供应商 [{new_name}]")
+            self._notify_switch(old_name, new_name, "测试连通性失败，活跃供应商被踢出")
+        else:
+            logger.warning("Agent Tokens 没有其他可用供应商，活跃状态已清空")
+            self._notify_switch(old_name, None, "测试连通性失败，无其他可用供应商")
+
     def test_connection_api(self, payload: Optional[dict] = Body(default=None)) -> schemas.Response:
         """
-        测试连通性：严格校验 API Key 有效性。
-        只有返回 HTTP 200 且鉴权通过时才判定为成功。
-        401/402/403 或网络错误均判定为失败。
+        测试连通性：两阶段严格校验。
+
+        阶段 1 — GET /models：验证 API Key 有效性及接口可达性。
+        阶段 2 — POST /chat/completions（stream=true）：发送最小化流式请求，
+                 验证供应商对 stream 模式的兼容性。
+
+        仅当两阶段均 HTTP 200 且响应 Body 无 error 字段时才判定为成功。
+        任何 HTTP >= 400 或异常均判定为失败，失败原因透传前端。
+
+        若 payload 中包含 provider_id，测试失败时递增该供应商的 failure_count，
+        测试成功时重置 failure_count 为 0。
+        前端通过 loadStatus() 刷新状态，response 不携带 data 字段以避免 unwrapResponse 误解包。
         """
+        import time as _time
+        _t0 = _time.monotonic()
         payload = payload or {}
         base_url = self._clean_text(payload.get("base_url")).rstrip("/")
         api_key = self._clean_text(payload.get("api_key"))
         model = self._clean_text(payload.get("model"))
+        provider_id = self._clean_text(payload.get("provider_id"))
+
+        logger.debug(
+            f"AgentTokens test_connection_api START | provider_id={provider_id} "
+            f"base_url={base_url} model={model} api_key={'***' + api_key[-4:] if api_key else 'N/A'}"
+        )
+
+        # 输入校验失败不标记故障（属于配置缺失，非连通性问题）
         if not api_key:
             return schemas.Response(success=False, message="缺少 API Key")
         if not base_url:
             return schemas.Response(success=False, message="缺少 API 地址")
+        if not model:
+            return schemas.Response(success=False, message="缺少模型名称，无法执行对话测试")
 
-        headers = {"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
+        def _fail(msg: str, hard: bool = True) -> schemas.Response:
+            """
+            标记供应商标记为故障并返回失败响应。
+            hard=True 时直接将 failure_count 设为 max_failures（硬故障，立即跳过）。
+            若该供应商是当前活跃节点，踢出并触发切换。
+            """
+            logger.warning(f"AgentTokens test_connection_api FAIL | provider_id={provider_id} msg={msg}")
+            if provider_id:
+                self._mark_provider_faulty(provider_id, msg, hard_failure=hard)
+                # 如果故障供应商是当前活跃节点，踢出并触发切换
+                self._kick_active_provider_if_faulty(provider_id)
+            # 不携带 data 字段：unwrapResponse 在 data 非空时会返回 data 而非根对象，
+            # 导致前端读不到 success/message 字段。前端通过 loadStatus() 刷新状态。
+            return schemas.Response(success=False, message=msg)
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
         if payload.get("user_agent"):
             headers["User-Agent"] = payload["user_agent"]
 
-        # 阶段 1：GET /models 探测（携带 API Key）
-        probe_error = None
+        # ── 阶段 1：GET /models 探测 ──────────────────────────────
+        _t1 = _time.monotonic()
         try:
             resp = requests.get(f"{base_url}/models", headers=headers, timeout=15)
-            if resp.status_code == 200:
-                # 验证返回内容有效性
-                try:
-                    data = resp.json()
-                    models = data.get("data", data) if isinstance(data, dict) else data
-                    if isinstance(models, list):
-                        return schemas.Response(success=True, message="连接成功（鉴权通过，/models 可达）")
-                    return schemas.Response(success=True, message="连接成功（鉴权通过）")
-                except Exception:
-                    return schemas.Response(success=True, message="连接成功（鉴权通过）")
-            if resp.status_code == 401:
-                return schemas.Response(success=False, message="401 Unauthorized - API Key 无效或已过期")
-            if resp.status_code == 402:
-                return schemas.Response(success=False, message="402 Payment Required - 账户欠费或配额已用完")
-            if resp.status_code == 403:
-                return schemas.Response(success=False, message="403 Forbidden - 无权限访问该接口")
-            # 其他状态码记录但不立即失败，继续尝试 chat
-            probe_error = f"/models 返回 {resp.status_code}"
         except requests.exceptions.ConnectionError as err:
-            return schemas.Response(success=False, message=f"连接失败: 无法连接到服务器 ({err})")
+            return _fail(f"连接失败: 无法连接到服务器 ({err})")
         except requests.exceptions.Timeout:
-            return schemas.Response(success=False, message="连接超时: 服务器无响应")
+            return _fail("连接超时: 服务器无响应")
         except Exception as err:
-            probe_error = str(err)
+            return _fail(f"连接失败: {err}")
 
-        # 阶段 2：回退到最小 chat 请求（需要模型名）
-        if not model:
-            return schemas.Response(
-                success=False,
-                message=f"连接失败: {probe_error or '未知错误'}（未提供模型名，无法进一步测试）",
-            )
+        logger.debug(
+            f"AgentTokens test_connection_api STAGE1 | status={resp.status_code} "
+            f"elapsed={_time.monotonic() - _t1:.2f}s"
+        )
+
+        if resp.status_code >= 400:
+            brief = self._status_brief(resp.status_code)
+            detail = self._extract_error_detail(resp)
+            msg = f"鉴权失败: {brief}"
+            if detail:
+                msg += f"（{detail}）"
+            return _fail(msg)
+
+        if resp.status_code != 200:
+            return _fail(f"鉴权失败: {self._status_brief(resp.status_code)} - 异常状态码")
+
+        # 校验 /models 返回内容
         try:
-            from openai import OpenAI, AuthenticationError, NotFoundError, RateLimitError, APIStatusError, APITimeoutError, APIConnectionError
-            client = OpenAI(api_key=api_key, base_url=base_url, timeout=30)
-            resp = client.chat.completions.create(
-                model=model,
-                messages=[{"role": "user", "content": "hi"}],
-                max_tokens=1,
-            )
-            if resp and resp.choices:
-                usage = resp.usage
-                prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
-                completion_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
-                return schemas.Response(
-                    success=True,
-                    message=f"连接成功，消耗 {prompt_tokens}+{completion_tokens} tokens",
+            data = resp.json()
+        except Exception:
+            return _fail("连接失败: /models 返回非 JSON 响应")
+
+        if isinstance(data, dict) and data.get("error"):
+            err_msg = self._extract_error_detail(resp)
+            return _fail(f"鉴权失败: 服务器返回错误 - {err_msg}")
+
+        # ── 阶段 2：POST /chat/completions 模拟真实对话 ────────────
+        # 构造最小化 Payload，仅包含必要参数，避免 OneAPI/NewAPI 等代理网关
+        # 因不支持 stream_options 等高级参数而返回 500 错误。
+        chat_payload = {
+            "model": model,
+            "messages": [
+                {"role": "user", "content": "1"},
+            ],
+            "stream": True,
+        }
+
+        _t2 = _time.monotonic()
+        try:
+            with requests.post(
+                f"{base_url}/chat/completions",
+                headers=headers,
+                json=chat_payload,
+                timeout=10,
+                stream=True,
+            ) as chat_resp:
+                logger.debug(
+                    f"AgentTokens test_connection_api STAGE2 | status={chat_resp.status_code} "
+                    f"elapsed={_time.monotonic() - _t2:.2f}s"
                 )
-            return schemas.Response(success=False, message="未收到有效响应")
-        except AuthenticationError as err:
-            status = getattr(err, 'status_code', 401)
-            detail = getattr(err, 'message', str(err)) or str(err)
-            return schemas.Response(success=False, message=f"{status} Unauthorized - {detail}")
-        except NotFoundError as err:
-            status = getattr(err, 'status_code', 404)
-            detail = getattr(err, 'message', str(err)) or str(err)
-            return schemas.Response(success=False, message=f"{status} Not Found - {detail}")
-        except RateLimitError as err:
-            status = getattr(err, 'status_code', 429)
-            detail = getattr(err, 'message', str(err)) or str(err)
-            return schemas.Response(success=False, message=f"{status} Too Many Requests - {detail}")
-        except APITimeoutError as err:
-            return schemas.Response(success=False, message=f"Timeout - {err}")
-        except APIConnectionError as err:
-            return schemas.Response(success=False, message=f"Connection Error - {err}")
-        except APIStatusError as err:
-            status = getattr(err, 'status_code', 'unknown')
-            detail = getattr(err, 'message', str(err)) or str(err)
-            return schemas.Response(success=False, message=f"{status} Error - {detail}")
+                # 状态码优先判断
+                if chat_resp.status_code >= 400:
+                    brief = self._status_brief(chat_resp.status_code)
+                    detail = self._extract_error_detail(chat_resp)
+                    msg = f"对话测试失败: {brief}"
+                    if detail:
+                        msg += f"（{detail}）"
+                    return _fail(msg)
+
+                if chat_resp.status_code != 200:
+                    return _fail(f"对话测试失败: {self._status_brief(chat_resp.status_code)} - 异常状态码")
+
+                # 流式响应：高容错读取前若干 chunk，验证连接通畅
+                # 使用 iter_content 替代 iter_lines，避免无尾 \n 时阻塞挂起
+                raw_snippet = ""  # 收集原始内容用于异常诊断日志
+                stream_error_msg = ""
+                _t3 = _time.monotonic()
+
+                try:
+                    _chunk_count = 0
+                    _line_buf = ""
+                    _done = False
+
+                    for raw_chunk in chat_resp.iter_content(chunk_size=512, decode_unicode=False):
+                        if _chunk_count >= 5:
+                            break
+                        _chunk_count += 1
+
+                        # 手动 decode，避免 decode_unicode=True 在非 UTF-8 内容上抛 UnicodeDecodeError
+                        if isinstance(raw_chunk, bytes):
+                            _line_buf += raw_chunk.decode("utf-8", errors="replace")
+                        elif raw_chunk:
+                            _line_buf += str(raw_chunk)
+
+                        # 按行处理缓冲区
+                        while "\n" in _line_buf:
+                            line, _line_buf = _line_buf.split("\n", 1)
+                            line = line.strip()
+                            if not line:
+                                continue
+
+                            if len(raw_snippet) < 500:
+                                raw_snippet += line + "\n"
+
+                            # SSE 心跳/注释行（以 : 开头），跳过
+                            if line.startswith(":"):
+                                continue
+
+                            # 检查是否包含 error 字段
+                            if '"error"' in line:
+                                try:
+                                    import json as _json
+                                    json_str = line[5:].strip() if line.startswith("data:") else line
+                                    chunk_data = _json.loads(json_str)
+                                    if isinstance(chunk_data, dict) and chunk_data.get("error"):
+                                        err_obj = chunk_data["error"]
+                                        stream_error_msg = (
+                                            err_obj.get("message", str(err_obj))
+                                            if isinstance(err_obj, dict)
+                                            else str(err_obj)
+                                        )
+                                except Exception:
+                                    pass
+                                if stream_error_msg:
+                                    _done = True
+                                    break
+
+                            # 读到 data: 行或任何非空非心跳内容 → 连接通畅
+                            _done = True
+                            break
+
+                        if _done:
+                            break
+
+                    # 处理缓冲区中剩余的不完整行
+                    if not _done and _line_buf.strip():
+                        line = _line_buf.strip()
+                        if len(raw_snippet) < 500:
+                            raw_snippet += line + "\n"
+                        if not line.startswith(":") and '"error"' not in line:
+                            _done = True  # 有内容即视为成功
+
+                    logger.debug(
+                        f"AgentTokens test_connection_api STREAM DONE | chunks={_chunk_count} "
+                        f"done={_done} error={stream_error_msg or 'none'} "
+                        f"elapsed={_time.monotonic() - _t3:.2f}s"
+                    )
+
+                    if stream_error_msg:
+                        return _fail(f"对话测试失败: 服务器返回错误 - {stream_error_msg}")
+
+                    # 兜底逻辑：HTTP 200 且无异常 → 视为测试成功
+                    # 即使未读到标准 data: 行（空流、非标 SSE、普通 HTTP 返回），
+                    # 只要连接正常建立且无网络异常，判定成功
+
+                except requests.exceptions.ChunkedEncodingError as err:
+                    logger.warning(
+                        f"Agent Tokens 测试连接流读取异常 (ChunkedEncodingError): {err}"
+                    )
+                    if raw_snippet:
+                        logger.debug(
+                            f"Agent Tokens 流式响应原始内容（前500字节）:\n{raw_snippet[:500]}"
+                        )
+                    return _fail(f"响应解析异常: 流式传输中断 - {err}")
+                except Exception as err:
+                    logger.warning(
+                        f"Agent Tokens 测试连接流读取异常 ({type(err).__name__}): {err}"
+                    )
+                    if raw_snippet:
+                        logger.debug(
+                            f"Agent Tokens 流式响应原始内容（前500字节）:\n{raw_snippet[:500]}"
+                        )
+                    return _fail(f"响应解析异常: {type(err).__name__}: {err}")
+
+        except requests.exceptions.ConnectionError as err:
+            return _fail(f"网络连接失败: 无法连接到服务器 ({err})")
+        except requests.exceptions.Timeout:
+            return _fail("网络连接超时")
         except Exception as err:
-            return schemas.Response(success=False, message=f"连接失败: {err}")
+            return _fail(f"对话测试失败: {err}")
+
+        # 测试成功：重置故障计数
+        if provider_id:
+            with self._usage_lock:
+                usage = self._load_usage()
+                record = usage.get(provider_id, {})
+                if record.get("failure_count", 0) > 0:
+                    logger.debug(f"Agent Tokens 供应商 [{provider_id}] 测试连接成功，重置失败计数")
+                    record["failure_count"] = 0
+                    record["last_error"] = None
+                    usage[provider_id] = record
+                    self._save_usage(usage)
+
+        logger.debug(
+            f"AgentTokens test_connection_api SUCCESS | provider_id={provider_id} "
+            f"total_elapsed={_time.monotonic() - _t0:.2f}s"
+        )
+        return schemas.Response(
+            success=True,
+            message="连接成功（鉴权通过 + 对话测试通过）",
+        )
 
     def _is_provider_available(self, provider: dict) -> bool:
         """
@@ -1009,10 +1326,14 @@ class AgentTokensPro(_PluginBase):
         if self._event_get(event.event_data, "selected_provider_id"):
             return
 
+        # 显式初始化，确保所有分支下条件判断都能正常进行
+        old_name = None
+        old_active_id = None
+
         # 手动锁定模式：检查手动选择的供应商是否仍然可用
         manual_override = getattr(self, "_manual_override", False)
         current_active_id = getattr(self, "_active_provider_id", None)
-        logger.info(
+        logger.debug(
             f"[AgentTokens.select_llm_provider] "
             f"_manual_override={manual_override}, _active_provider_id={current_active_id}"
         )
@@ -1029,7 +1350,7 @@ class AgentTokensPro(_PluginBase):
                 # 手动选择的供应商仍可用，继续使用
                 provider_name = manual_provider.get("name")
                 model = manual_provider.get("model")
-                logger.info(f"Agent Tokens 手动锁定模式：继续使用 [{provider_name}] 模型：[{model}]")
+                logger.debug(f"Agent Tokens 手动锁定模式：继续使用 [{provider_name}] 模型：[{model}]")
 
                 self._event_set(event.event_data, "provider", manual_provider.get("provider") or "openai")
                 self._event_set(event.event_data, "base_url", manual_provider.get("base_url"))
@@ -1064,7 +1385,7 @@ class AgentTokensPro(_PluginBase):
         # 自动选择模式
         provider = self._select_provider()
         if not provider:
-            logger.info("Agent Tokens 没有可用供应商，Agent 将使用系统 LLM 配置")
+            logger.debug("Agent Tokens 没有可用供应商，Agent 将使用系统 LLM 配置")
             self._active_provider_id = None
             return
 
@@ -1072,7 +1393,7 @@ class AgentTokensPro(_PluginBase):
         model = provider.get("model")
         old_active_id = self._active_provider_id
         self._active_provider_id = provider.get("id")
-        logger.info(f"Agent Tokens 分配 LLM 供应商：[{provider_name}] 模型：[{model}]")
+        logger.debug(f"Agent Tokens 分配 LLM 供应商：[{provider_name}] 模型：[{model}]")
 
         # 立即更新时间戳，提前展示"正在使用"
         with self._usage_lock:
@@ -1139,7 +1460,7 @@ class AgentTokensPro(_PluginBase):
                 record["last_error"] = None
                 # 成功调用后清零失败计数，允许该供应商重新被选中
                 if record.get("failure_count", 0) > 0:
-                    logger.info(f"Agent Tokens 供应商 [{provider_name}] 调用成功，重置失败计数")
+                    logger.debug(f"Agent Tokens 供应商 [{provider_name}] 调用成功，重置失败计数")
                     record["failure_count"] = 0
             else:
                 error_text = self._clean_text(self._event_get(event.event_data, "error"))
@@ -1168,7 +1489,7 @@ class AgentTokensPro(_PluginBase):
             )
             usage[provider_id] = record
             
-            logger.info(f"Agent Tokens 更新用量记录：供应商 [{provider_name}] 本次消耗了 {total_tokens} Tokens")
+            logger.debug(f"Agent Tokens 更新用量记录：供应商 [{provider_name}] 本次消耗了 {total_tokens} Tokens")
             
             self._save_usage(usage)
 

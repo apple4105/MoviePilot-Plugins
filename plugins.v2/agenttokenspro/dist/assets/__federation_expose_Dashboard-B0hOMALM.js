@@ -1,5 +1,5 @@
 import { importShared } from './__federation_fn_import-JrT3xvdd.js';
-import { _ as _export_sfc, f as formatTokens, u as unwrapResponse } from './_plugin-vue_export-helper-D-4vgHBx.js';
+import { _ as _export_sfc, f as formatTokens, u as unwrapResponse } from './_plugin-vue_export-helper-DiiWc7O6.js';
 
 const {resolveComponent:_resolveComponent,createVNode:_createVNode,withCtx:_withCtx,toDisplayString:_toDisplayString,createTextVNode:_createTextVNode,openBlock:_openBlock,createElementBlock:_createElementBlock,createCommentVNode:_createCommentVNode,createBlock:_createBlock,createElementVNode:_createElementVNode,unref:_unref,renderList:_renderList,Fragment:_Fragment,normalizeClass:_normalizeClass} = await importShared('vue');
 
@@ -28,18 +28,17 @@ const _hoisted_11 = {
   class: "agenttokens-dashboard-list"
 };
 const _hoisted_12 = { class: "agenttokens-dashboard-provider__main" };
-const _hoisted_13 = { class: "agenttokens-dashboard-provider__name" };
-const _hoisted_14 = { class: "agenttokens-dashboard-provider__model" };
-const _hoisted_15 = { class: "agenttokens-dashboard-provider__tokens" };
-const _hoisted_16 = {
+const _hoisted_13 = { class: "agenttokens-dashboard-provider__model" };
+const _hoisted_14 = { class: "agenttokens-dashboard-provider__tokens" };
+const _hoisted_15 = {
   key: 2,
   class: "agenttokens-dashboard-empty"
 };
-const _hoisted_17 = {
+const _hoisted_16 = {
   key: 3,
   class: "agenttokens-dashboard-state text-caption text-disabled"
 };
-const _hoisted_18 = {
+const _hoisted_17 = {
   key: 0,
   class: "text-caption text-disabled"
 };
@@ -146,7 +145,20 @@ const visibleProviderLimit = computed(() => {
   }
   return 3
 });
-const visibleProviders = computed(() => providers.value.slice(0, visibleProviderLimit.value));
+// 排序：正常(紫色) > 缺配置(黄色) > 故障/耗尽(红色)，同组保持原始顺序
+const sortedProviders = computed(() => {
+  const list = [...providers.value];
+  return list.sort((a, b) => {
+    const aFaulty = isProviderFaulty(a);
+    const bFaulty = isProviderFaulty(b);
+    const aMisconf = isProviderMisconfigured(a);
+    const bMisconf = isProviderMisconfigured(b);
+    const aRank = aFaulty ? 2 : (aMisconf ? 1 : 0);
+    const bRank = bFaulty ? 2 : (bMisconf ? 1 : 0);
+    return aRank - bRank
+  })
+});
+const visibleProviders = computed(() => sortedProviders.value.slice(0, visibleProviderLimit.value));
 // 兼容宿主传入的数字或字符串刷新间隔。
 const refreshSeconds = computed(() => {
   const seconds = Number(props.refreshInterval || attrs.value.refresh || 0);
@@ -167,6 +179,19 @@ const lastRefreshedTime = computed(() => {
     minute: '2-digit',
   })
 });
+
+// 判断供应商是否处于故障状态（连续失败达到阈值或额度耗尽或已禁用）
+function isProviderFaulty(row) {
+  const maxFailures = status.value?.config?.max_failures || 3;
+  const failureCount = row?.usage?.failure_count || 0;
+  const faulty = failureCount >= maxFailures || row?.usage?.exhausted || !row?.enabled;
+  return faulty
+}
+
+// 判断供应商是否缺少必要配置（无 api_key / base_url / model）
+function isProviderMisconfigured(row) {
+  return !row?.api_key || !row?.base_url || !row?.model
+}
 
 // 读取 Agent Tokens 仪表板状态。
 async function loadStatus() {
@@ -242,6 +267,7 @@ return (_ctx, _cache) => {
   const _component_VProgressCircular = _resolveComponent("VProgressCircular");
   const _component_VAlert = _resolveComponent("VAlert");
   const _component_VProgressLinear = _resolveComponent("VProgressLinear");
+  const _component_VChip = _resolveComponent("VChip");
   const _component_VCardText = _resolveComponent("VCardText");
   const _component_VDivider = _resolveComponent("VDivider");
   const _component_VSpacer = _resolveComponent("VSpacer");
@@ -373,15 +399,31 @@ return (_ctx, _cache) => {
                                   size: "16"
                                 }, null, 8, ["icon", "color"]),
                                 _createElementVNode("div", _hoisted_12, [
-                                  _createElementVNode("div", _hoisted_13, _toDisplayString(row.name || '未命名供应商'), 1),
-                                  _createElementVNode("div", _hoisted_14, _toDisplayString(row.model || '未配置模型'), 1)
+                                  _createElementVNode("div", {
+                                    class: _normalizeClass(["agenttokens-dashboard-provider__name", {
+                    'agenttokens-dashboard-provider__name--faulty': isProviderFaulty(row),
+                    'agenttokens-dashboard-provider__name--misconfigured': !isProviderFaulty(row) && isProviderMisconfigured(row),
+                  }])
+                                  }, _toDisplayString(row.name || '未命名供应商'), 3),
+                                  _createElementVNode("div", _hoisted_13, _toDisplayString(row.model || '未配置模型'), 1)
                                 ]),
-                                _createElementVNode("div", _hoisted_15, _toDisplayString(_unref(formatTokens)(row.usage?.total_tokens)), 1)
+                                _createElementVNode("div", _hoisted_14, _toDisplayString(_unref(formatTokens)(row.usage?.total_tokens)), 1),
+                                _createVNode(_component_VChip, {
+                                  size: "x-small",
+                                  color: isProviderFaulty(row) ? 'error' : (isProviderMisconfigured(row) ? 'warning' : 'success'),
+                                  variant: "tonal",
+                                  class: "agenttokens-dashboard-provider__status"
+                                }, {
+                                  default: _withCtx(() => [
+                                    _createTextVNode(_toDisplayString(isProviderFaulty(row) ? (row.usage?.exhausted ? '耗尽' : '故障') : (isProviderMisconfigured(row) ? '缺配置' : '可用')), 1)
+                                  ]),
+                                  _: 2
+                                }, 1032, ["color"])
                               ], 2))
                             }), 128))
                           ]))
                         : (!providers.value.length)
-                          ? (_openBlock(), _createElementBlock("div", _hoisted_16, [
+                          ? (_openBlock(), _createElementBlock("div", _hoisted_15, [
                               _createVNode(_component_VIcon, {
                                 icon: "mdi-database-off-outline",
                                 size: "18"
@@ -390,7 +432,7 @@ return (_ctx, _cache) => {
                             ]))
                           : _createCommentVNode("", true)
                     ]))
-                  : (_openBlock(), _createElementBlock("div", _hoisted_17, " 暂无数据 "))
+                  : (_openBlock(), _createElementBlock("div", _hoisted_16, " 暂无数据 "))
           ]),
           _: 1
         }),
@@ -404,7 +446,7 @@ return (_ctx, _cache) => {
             }, {
               default: _withCtx(() => [
                 (!isMini.value)
-                  ? (_openBlock(), _createElementBlock("span", _hoisted_18, _toDisplayString(lastRefreshedTime.value ? `更新于 ${lastRefreshedTime.value}` : '等待更新'), 1))
+                  ? (_openBlock(), _createElementBlock("span", _hoisted_17, _toDisplayString(lastRefreshedTime.value ? `更新于 ${lastRefreshedTime.value}` : '等待更新'), 1))
                   : _createCommentVNode("", true),
                 _createVNode(_component_VSpacer),
                 _createVNode(_component_VBtn, {
@@ -434,6 +476,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Dashboard = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-6f7e31cd"]]);
+const Dashboard = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-d84eec1a"]]);
 
 export { Dashboard as default };

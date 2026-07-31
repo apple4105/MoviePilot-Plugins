@@ -1,7 +1,7 @@
 import { importShared } from './__federation_fn_import-JrT3xvdd.js';
-import { _ as _export_sfc, f as formatTokens, P as PROVIDER_TYPE_OPTIONS, n as normalizeModelOptions, a as createProvider, b as buildProviderRows, d as buildProviderSummary, e as normalizeProvider, g as getNextProviderPriority } from './_plugin-vue_export-helper-BYTvrSm4.js';
+import { _ as _export_sfc, f as formatTokens, P as PROVIDER_TYPE_OPTIONS, n as normalizeModelOptions, a as createProvider, b as buildProviderRows, d as buildProviderSummary, e as normalizeProvider, g as getNextProviderPriority } from './_plugin-vue_export-helper-DiiWc7O6.js';
 
-const {createElementVNode:_createElementVNode$5,openBlock:_openBlock$5,createElementBlock:_createElementBlock$4,createCommentVNode:_createCommentVNode$4,renderList:_renderList$3,Fragment:_Fragment$4,resolveComponent:_resolveComponent$5,createVNode:_createVNode$5,normalizeClass:_normalizeClass$3,withModifiers:_withModifiers$2,toDisplayString:_toDisplayString$5,createTextVNode:_createTextVNode$5,withCtx:_withCtx$5,unref:_unref$4,createBlock:_createBlock$5} = await importShared('vue');
+const {createElementVNode:_createElementVNode$5,openBlock:_openBlock$5,createElementBlock:_createElementBlock$4,createCommentVNode:_createCommentVNode$4,renderList:_renderList$3,Fragment:_Fragment$4,resolveComponent:_resolveComponent$5,createVNode:_createVNode$5,normalizeClass:_normalizeClass$4,withModifiers:_withModifiers$3,toDisplayString:_toDisplayString$5,createTextVNode:_createTextVNode$5,withCtx:_withCtx$5,unref:_unref$4,createBlock:_createBlock$5} = await importShared('vue');
 
 
 const _hoisted_1$5 = {
@@ -12,7 +12,7 @@ const _hoisted_2$5 = {
   key: 1,
   class: "col-key"
 };
-const _hoisted_3$5 = ["draggable", "onClick", "onDragstart", "onDragover", "onDrop"];
+const _hoisted_3$5 = ["draggable", "onDragstart", "onDragover", "onDrop"];
 const _hoisted_4$5 = { class: "drag-col text-center" };
 const _hoisted_5$5 = ["onClick"];
 const _hoisted_6$5 = { class: "status-toggle-cell" };
@@ -32,7 +32,7 @@ const _hoisted_13$3 = { class: "col-limit" };
 const _hoisted_14$3 = { key: 0 };
 const _hoisted_15$2 = ["colspan"];
 
-const {ref: ref$3} = await importShared('vue');
+const {ref: ref$4,computed: computed$5} = await importShared('vue');
 
 
 const _sfc_main$5 = {
@@ -62,6 +62,10 @@ const _sfc_main$5 = {
     type: Boolean,
     default: false,
   },
+  maxFailures: {
+    type: Number,
+    default: 3,
+  },
 },
   emits: ['edit', 'remove', 'select', 'toggle', 'reorder'],
   setup(__props, { emit: __emit }) {
@@ -70,10 +74,23 @@ const props = __props;
 
 const emit = __emit;
 
-ref$3(null);
-ref$3(null);
-const dragIndex = ref$3(-1);
-const dragOverIndex = ref$3(-1);
+const dragIndex = ref$4(-1);
+const dragOverIndex = ref$4(-1);
+
+// 排序：正常(紫色) > 缺配置(黄色) > 故障/耗尽(红色)，同组保持原始顺序
+// 拖拽模式下不排序，保持用户拖拽顺序
+const sortedProviders = computed$5(() => {
+  if (props.dragMode) return [...props.providers]
+  return [...props.providers].sort((a, b) => {
+    const aFaulty = isFaulty(a);
+    const bFaulty = isFaulty(b);
+    const aMisconf = isMisconfigured(a);
+    const bMisconf = isMisconfigured(b);
+    const aRank = aFaulty ? 2 : (aMisconf ? 1 : 0);
+    const bRank = bFaulty ? 2 : (bMisconf ? 1 : 0);
+    return aRank - bRank
+  })
+});
 
 // 安全获取模型名称字符串，防止 VCombobox 返回对象导致显示 [object Object]
 function getModelName(model) {
@@ -101,11 +118,18 @@ function isFailed(row) {
   return props.failedProviderIds.includes(row.id)
 }
 
-// 点击行切换活跃供应商
-function handleRowClick(index) {
-  const row = props.providers[index];
-  if (!row) return
-  emit('select', row.id);
+// 判断供应商是否处于故障状态（连续失败达到阈值或额度耗尽或已停用）
+function isFaulty(row) {
+  if (!row.enabled) return true
+  const matched = props.providerRows.find(r => r.id === row.id);
+  if (matched?.usage?.exhausted) return true
+  if ((matched?.usage?.failure_count || 0) >= props.maxFailures) return true
+  return false
+}
+
+// 判断供应商是否缺少必要配置（无 api_key / base_url / model）
+function isMisconfigured(row) {
+  return !row?.api_key || !row?.base_url || !row?.model
 }
 
 function handleToggle(index) {
@@ -113,7 +137,7 @@ function handleToggle(index) {
 }
 
 function rowClasses(row) {
-  const idx = props.providers.indexOf(row);
+  const idx = sortedProviders.value.indexOf(row);
   return {
     'provider-row--active': isActive(row),
     'provider-row--failed': isFailed(row),
@@ -171,7 +195,7 @@ return (_ctx, _cache) => {
   }, {
     default: _withCtx$5(() => [
       _createElementVNode$5("div", {
-        class: _normalizeClass$3(["provider-table-scroll", { 'is-drag-mode': __props.dragMode }])
+        class: _normalizeClass$4(["provider-table-scroll", { 'is-drag-mode': __props.dragMode }])
       }, [
         _createVNode$5(_component_VTable, { density: "comfortable" }, {
           default: _withCtx$5(() => [
@@ -194,12 +218,11 @@ return (_ctx, _cache) => {
               ])
             ]),
             _createElementVNode$5("tbody", null, [
-              (_openBlock$5(true), _createElementBlock$4(_Fragment$4, null, _renderList$3(__props.providers, (row, index) => {
+              (_openBlock$5(true), _createElementBlock$4(_Fragment$4, null, _renderList$3(sortedProviders.value, (row, index) => {
                 return (_openBlock$5(), _createElementBlock$4("tr", {
                   key: row.id || index,
                   draggable: __props.dragMode,
-                  class: _normalizeClass$3([rowClasses(row), "clickable-row"]),
-                  onClick: $event => (handleRowClick(index)),
+                  class: _normalizeClass$4([rowClasses(row), "provider-row"]),
                   onDragstart: $event => (onDragStart(index, $event)),
                   onDragover: $event => (onDragOver(index, $event)),
                   onDragleave: onDragLeave,
@@ -215,15 +238,22 @@ return (_ctx, _cache) => {
                   ]),
                   _createElementVNode$5("td", {
                     class: "col-enable",
-                    onClick: _withModifiers$2($event => (handleToggle(index)), ["stop"])
+                    onClick: _withModifiers$3($event => (handleToggle(index)), ["stop"])
                   }, [
                     _createElementVNode$5("div", _hoisted_6$5, [
                       _createElementVNode$5("span", {
-                        class: _normalizeClass$3(['status-dot', row.enabled ? 'active' : 'inactive'])
+                        class: _normalizeClass$4(['status-dot', row.enabled ? 'active' : 'inactive'])
                       }, null, 2)
                     ])
                   ], 8, _hoisted_5$5),
-                  _createElementVNode$5("td", _hoisted_7$5, _toDisplayString$5(row.name), 1),
+                  _createElementVNode$5("td", _hoisted_7$5, [
+                    _createElementVNode$5("span", {
+                      class: _normalizeClass$4({
+                'provider-name--faulty': isFaulty(row),
+                'provider-name--misconfigured': !isFaulty(row) && isMisconfigured(row),
+              })
+                    }, _toDisplayString$5(row.name), 3)
+                  ]),
                   _createElementVNode$5("td", _hoisted_8$5, _toDisplayString$5(row.provider), 1),
                   (__props.showCredentials)
                     ? (_openBlock$5(), _createElementBlock$4("td", _hoisted_9$4, _toDisplayString$5(row.base_url), 1))
@@ -247,7 +277,7 @@ return (_ctx, _cache) => {
                   _createElementVNode$5("td", _hoisted_13$3, _toDisplayString$5(row.token_limit > 0 ? _unref$4(formatTokens)(row.token_limit) : '不限'), 1),
                   _createElementVNode$5("td", {
                     class: "col-actions",
-                    onClick: _cache[0] || (_cache[0] = _withModifiers$2(() => {}, ["stop"]))
+                    onClick: _cache[0] || (_cache[0] = _withModifiers$3(() => {}, ["stop"]))
                   }, [
                     _createVNode$5(_component_VBtn, {
                       icon: "mdi-pencil",
@@ -267,7 +297,7 @@ return (_ctx, _cache) => {
                   ])
                 ], 42, _hoisted_3$5))
               }), 128)),
-              (!__props.providers.length)
+              (!sortedProviders.value.length)
                 ? (_openBlock$5(), _createElementBlock$4("tr", _hoisted_14$3, [
                     _createElementVNode$5("td", {
                       colspan: __props.showCredentials ? 10 : 8,
@@ -287,18 +317,18 @@ return (_ctx, _cache) => {
 }
 
 };
-const ProviderConfigTable = /*#__PURE__*/_export_sfc(_sfc_main$5, [['__scopeId',"data-v-75b8ba5d"]]);
+const ProviderConfigTable = /*#__PURE__*/_export_sfc(_sfc_main$5, [['__scopeId',"data-v-4f7cae22"]]);
 
-const {toDisplayString:_toDisplayString$4,createElementVNode:_createElementVNode$4,resolveComponent:_resolveComponent$4,createVNode:_createVNode$4,createTextVNode:_createTextVNode$4,withModifiers:_withModifiers$1,withCtx:_withCtx$4,unref:_unref$3,openBlock:_openBlock$4,createBlock:_createBlock$4,createCommentVNode:_createCommentVNode$3,createElementBlock:_createElementBlock$3,Fragment:_Fragment$3} = await importShared('vue');
+const {toDisplayString:_toDisplayString$4,createElementVNode:_createElementVNode$4,normalizeClass:_normalizeClass$3,openBlock:_openBlock$4,createElementBlock:_createElementBlock$3,createCommentVNode:_createCommentVNode$3,resolveComponent:_resolveComponent$4,withCtx:_withCtx$4,createVNode:_createVNode$4,createTextVNode:_createTextVNode$4,withModifiers:_withModifiers$2,createBlock:_createBlock$4,unref:_unref$3,Fragment:_Fragment$3} = await importShared('vue');
 
 
 const _hoisted_1$4 = { class: "form-item" };
 const _hoisted_2$4 = { class: "form-item" };
 const _hoisted_3$4 = { class: "form-item" };
 const _hoisted_4$4 = { class: "form-item" };
-const _hoisted_5$4 = { class: "form-label" };
-const _hoisted_6$4 = { class: "input-group" };
-const _hoisted_7$4 = { class: "form-item" };
+const _hoisted_5$4 = { class: "input-group" };
+const _hoisted_6$4 = { class: "form-item" };
+const _hoisted_7$4 = { class: "form-label" };
 const _hoisted_8$4 = { class: "input-group" };
 const _hoisted_9$3 = { class: "form-item" };
 const _hoisted_10$3 = { class: "form-item" };
@@ -310,7 +340,7 @@ const _hoisted_14$2 = {
   class: "px-4 pb-3"
 };
 
-const {computed: computed$4,ref: ref$2,watch: watch$2} = await importShared('vue');
+const {computed: computed$4,ref: ref$3,watch: watch$2} = await importShared('vue');
 
 
 const _sfc_main$4 = {
@@ -337,24 +367,24 @@ const _sfc_main$4 = {
     default: () => [],
   },
 },
-  emits: ['update:modelValue', 'commit', 'query-models', 'test-connection'],
+  emits: ['update:modelValue', 'commit', 'query-models', 'test-connection', 'delete'],
   setup(__props, { emit: __emit }) {
 
 const props = __props;
 
 const emit = __emit;
 
-const modelOptions = ref$2([]);
-const loadingModels = ref$2(false);
-const testingConnection = ref$2(false);
-const modelError = ref$2('');
-const testResult = ref$2(null);
-const connectionTestState = ref$2(null);
-const showApiKey = ref$2(false);
-const clipboardHint = ref$2('');
-const clipboardHintColor = ref$2('info');
-const showPasteDialog = ref$2(false);
-const pasteText = ref$2('');
+const modelOptions = ref$3([]);
+const loadingModels = ref$3(false);
+const testingConnection = ref$3(false);
+const modelError = ref$3('');
+const testResult = ref$3(null);
+const connectionTestState = ref$3(null);
+const showApiKey = ref$3(false);
+const clipboardHint = ref$3('');
+const clipboardHintColor = ref$3('info');
+const showPasteDialog = ref$3(false);
+const pasteText = ref$3('');
 let resultTimer = null;
 
 const dialogVisible = computed$4({
@@ -456,7 +486,7 @@ watch$2(testResult, (val) => {
   }
 });
 
-// 监听 API 地址变化：若选中预置厂商，自动填充名称
+// 监听 API 地址变化：若选中预置厂商，自动填充名称（重名时追加数字）
 watch$2(
   () => props.provider.base_url,
   (newUrl) => {
@@ -464,9 +494,22 @@ watch$2(
     const cleanUrl = extractPureUrl(newUrl);
     const matchedVendor = props.vendors.find(v => v.url === cleanUrl);
     if (matchedVendor && matchedVendor.name) {
-      // 仅在名称为空或未修改时自动填充
-      if (!props.provider.name || props.provider.name.trim() === '') {
-        props.provider.name = matchedVendor.name;
+      const vendorName = matchedVendor.name.trim();
+      // 收集除当前编辑项外的所有已存在名称
+      const existingNames = props.existingProviders
+        .filter((_, i) => props.editorIndex < 0 || i !== props.editorIndex)
+        .map(p => (p.name || '').trim());
+      // 无论名称为空还是已有值，都检查重名并追加数字
+      if (!existingNames.includes(vendorName)) {
+        props.provider.name = vendorName;
+      } else {
+        // 重名：解析基础名称并追加数字
+        const baseName = vendorName.replace(/\d+$/, '').trim() || vendorName;
+        let suffix = 1;
+        while (existingNames.includes(`${baseName}${suffix}`)) {
+          suffix++;
+        }
+        props.provider.name = `${baseName}${suffix}`;
       }
     }
   }
@@ -517,6 +560,7 @@ async function testConnection() {
     api_key: props.provider.api_key,
     model: props.provider.model,
     provider: props.provider.provider,
+    provider_id: props.provider.id || null,
   };
   try {
     const result = await new Promise((resolve, reject) => {
@@ -537,6 +581,12 @@ async function testConnection() {
   }
 }
 
+// 删除当前编辑的供应商：直接关闭弹窗并通知父组件（由父组件统一确认）
+function handleDelete() {
+  dialogVisible.value = false;
+  emit('delete', props.editorIndex);
+}
+
 // 提交当前弹窗编辑的供应商配置。
 function commitProvider() {
   const model = props.provider.model;
@@ -550,6 +600,28 @@ function commitProvider() {
   }
   // 清洗 URL，确保传给后端的是纯 API 地址
   props.provider.base_url = extractPureUrl(props.provider.base_url);
+
+  // 名称校验：为空则提示并阻止提交
+  const currentName = (props.provider.name || '').trim();
+  if (!currentName) {
+    testResult.value = { success: false, message: '名称不能为空' };
+    return
+  }
+
+  // 名称重名自动加数字后缀
+  if (currentName) {
+    const baseName = currentName.replace(/\d+$/, '').trim() || currentName;
+    const existingNames = props.existingProviders
+      .filter((_, i) => props.editorIndex < 0 || i !== props.editorIndex)
+      .map(p => (p.name || '').trim());
+    if (existingNames.includes(currentName)) {
+      let suffix = 1;
+      while (existingNames.includes(`${baseName}${suffix}`)) {
+        suffix++;
+      }
+      props.provider.name = `${baseName}${suffix}`;
+    }
+  }
 
   // API Key 重名校验
   const currentKey = (props.provider.api_key || '').trim();
@@ -706,6 +778,7 @@ async function queryModels() {
 }
 
 return (_ctx, _cache) => {
+  const _component_VFadeTransition = _resolveComponent$4("VFadeTransition");
   const _component_VSpacer = _resolveComponent$4("VSpacer");
   const _component_VBtn = _resolveComponent$4("VBtn");
   const _component_VCardTitle = _resolveComponent$4("VCardTitle");
@@ -718,7 +791,6 @@ return (_ctx, _cache) => {
   const _component_VAlert = _resolveComponent$4("VAlert");
   const _component_VCard = _resolveComponent$4("VCard");
   const _component_VDialog = _resolveComponent$4("VDialog");
-  const _component_VSnackbar = _resolveComponent$4("VSnackbar");
   const _component_VTextarea = _resolveComponent$4("VTextarea");
 
   return (_openBlock$4(), _createElementBlock$3(_Fragment$3, null, [
@@ -735,14 +807,41 @@ return (_ctx, _cache) => {
             _createVNode$4(_component_VCardTitle, { class: "d-flex align-center" }, {
               default: _withCtx$4(() => [
                 _createElementVNode$4("span", null, _toDisplayString$4(isEdit.value ? '编辑供应商' : '新增供应商'), 1),
+                _createVNode$4(_component_VFadeTransition, null, {
+                  default: _withCtx$4(() => [
+                    (clipboardHint.value)
+                      ? (_openBlock$4(), _createElementBlock$3("span", {
+                          key: 0,
+                          class: _normalizeClass$3(["ml-2 text-caption", clipboardHintColor.value === 'error' ? 'text-error' : clipboardHintColor.value === 'success' ? 'text-success' : clipboardHintColor.value === 'warning' ? 'text-warning' : 'text-info'])
+                        }, _toDisplayString$4(clipboardHint.value), 3))
+                      : _createCommentVNode$3("", true)
+                  ]),
+                  _: 1
+                }),
                 _createVNode$4(_component_VSpacer),
+                (isEdit.value)
+                  ? (_openBlock$4(), _createBlock$4(_component_VBtn, {
+                      key: 0,
+                      "prepend-icon": "mdi-delete-outline",
+                      size: "small",
+                      variant: "tonal",
+                      color: "error",
+                      class: "mr-2",
+                      onClick: _withModifiers$2(handleDelete, ["stop"])
+                    }, {
+                      default: _withCtx$4(() => [...(_cache[16] || (_cache[16] = [
+                        _createTextVNode$4(" 删除 ", -1)
+                      ]))]),
+                      _: 1
+                    }))
+                  : _createCommentVNode$3("", true),
                 _createVNode$4(_component_VBtn, {
                   "prepend-icon": "mdi-clipboard-arrow-down",
                   size: "small",
                   variant: "tonal",
                   color: "primary",
                   class: "mr-2",
-                  onClick: _withModifiers$1(importFromClipboard, ["stop"])
+                  onClick: _withModifiers$2(importFromClipboard, ["stop"])
                 }, {
                   default: _withCtx$4(() => [...(_cache[17] || (_cache[17] = [
                     _createTextVNode$4(" 剪贴板导入 ", -1)
@@ -796,11 +895,34 @@ return (_ctx, _cache) => {
                   }, null, 8, ["modelValue", "items"])
                 ]),
                 _createElementVNode$4("div", _hoisted_4$4, [
-                  _createElementVNode$4("span", _hoisted_5$4, _toDisplayString$4(modelCountText.value), 1),
-                  _createElementVNode$4("div", _hoisted_6$4, [
+                  _cache[21] || (_cache[21] = _createElementVNode$4("span", { class: "form-label" }, "API Key", -1)),
+                  _createElementVNode$4("div", _hoisted_5$4, [
+                    _createVNode$4(_component_VTextField, {
+                      modelValue: __props.provider.api_key,
+                      "onUpdate:modelValue": _cache[4] || (_cache[4] = $event => ((__props.provider.api_key) = $event)),
+                      type: isEdit.value && !showApiKey.value ? 'password' : 'text',
+                      variant: "outlined",
+                      "hide-details": "",
+                      class: "apikey-field"
+                    }, null, 8, ["modelValue", "type"]),
+                    (isEdit.value)
+                      ? (_openBlock$4(), _createBlock$4(_component_VBtn, {
+                          key: 0,
+                          icon: showApiKey.value ? 'mdi-eye-off' : 'mdi-eye',
+                          size: "small",
+                          variant: "tonal",
+                          class: "input-action-btn",
+                          onClick: _cache[5] || (_cache[5] = _withModifiers$2($event => (showApiKey.value = !showApiKey.value), ["stop"]))
+                        }, null, 8, ["icon"]))
+                      : _createCommentVNode$3("", true)
+                  ])
+                ]),
+                _createElementVNode$4("div", _hoisted_6$4, [
+                  _createElementVNode$4("span", _hoisted_7$4, _toDisplayString$4(modelCountText.value), 1),
+                  _createElementVNode$4("div", _hoisted_8$4, [
                     _createVNode$4(_component_VCombobox, {
                       modelValue: __props.provider.model,
-                      "onUpdate:modelValue": _cache[4] || (_cache[4] = $event => ((__props.provider.model) = $event)),
+                      "onUpdate:modelValue": _cache[6] || (_cache[6] = $event => ((__props.provider.model) = $event)),
                       items: modelOptions.value,
                       loading: loadingModels.value,
                       "error-messages": modelError.value,
@@ -815,31 +937,8 @@ return (_ctx, _cache) => {
                       variant: "tonal",
                       loading: loadingModels.value,
                       class: "input-action-btn",
-                      onClick: _withModifiers$1(queryModels, ["stop"])
+                      onClick: _withModifiers$2(queryModels, ["stop"])
                     }, null, 8, ["loading"])
-                  ])
-                ]),
-                _createElementVNode$4("div", _hoisted_7$4, [
-                  _cache[21] || (_cache[21] = _createElementVNode$4("span", { class: "form-label" }, "API Key", -1)),
-                  _createElementVNode$4("div", _hoisted_8$4, [
-                    _createVNode$4(_component_VTextField, {
-                      modelValue: __props.provider.api_key,
-                      "onUpdate:modelValue": _cache[5] || (_cache[5] = $event => ((__props.provider.api_key) = $event)),
-                      type: isEdit.value && !showApiKey.value ? 'password' : 'text',
-                      variant: "outlined",
-                      "hide-details": "",
-                      class: "apikey-field"
-                    }, null, 8, ["modelValue", "type"]),
-                    (isEdit.value)
-                      ? (_openBlock$4(), _createBlock$4(_component_VBtn, {
-                          key: 0,
-                          icon: showApiKey.value ? 'mdi-eye-off' : 'mdi-eye',
-                          size: "small",
-                          variant: "tonal",
-                          class: "input-action-btn",
-                          onClick: _cache[6] || (_cache[6] = _withModifiers$1($event => (showApiKey.value = !showApiKey.value), ["stop"]))
-                        }, null, 8, ["icon"]))
-                      : _createCommentVNode$3("", true)
                   ])
                 ]),
                 _createElementVNode$4("div", _hoisted_9$3, [
@@ -934,22 +1033,9 @@ return (_ctx, _cache) => {
       ]),
       _: 1
     }, 8, ["modelValue"]),
-    _createVNode$4(_component_VSnackbar, {
-      "model-value": !!clipboardHint.value,
-      timeout: 2500,
-      location: "top",
-      color: clipboardHintColor.value,
-      variant: "tonal",
-      "onUpdate:modelValue": _cache[13] || (_cache[13] = v => { if (!v) clipboardHint.value = ''; })
-    }, {
-      default: _withCtx$4(() => [
-        _createTextVNode$4(_toDisplayString$4(clipboardHint.value), 1)
-      ]),
-      _: 1
-    }, 8, ["model-value", "color"]),
     _createVNode$4(_component_VDialog, {
       modelValue: showPasteDialog.value,
-      "onUpdate:modelValue": _cache[16] || (_cache[16] = $event => ((showPasteDialog).value = $event)),
+      "onUpdate:modelValue": _cache[15] || (_cache[15] = $event => ((showPasteDialog).value = $event)),
       "max-width": "520",
       persistent: ""
     }, {
@@ -977,7 +1063,7 @@ return (_ctx, _cache) => {
                 }),
                 _createVNode$4(_component_VTextarea, {
                   modelValue: pasteText.value,
-                  "onUpdate:modelValue": _cache[14] || (_cache[14] = $event => ((pasteText).value = $event)),
+                  "onUpdate:modelValue": _cache[13] || (_cache[13] = $event => ((pasteText).value = $event)),
                   variant: "outlined",
                   placeholder: "Base URL: https://www.shiro-alice.live:62955/v1\nAPI Key : sk-xxx...\nModel   : xopglm52",
                   rows: "5",
@@ -991,7 +1077,7 @@ return (_ctx, _cache) => {
               default: _withCtx$4(() => [
                 _createVNode$4(_component_VBtn, {
                   variant: "text",
-                  onClick: _cache[15] || (_cache[15] = $event => (showPasteDialog.value = false))
+                  onClick: _cache[14] || (_cache[14] = $event => (showPasteDialog.value = false))
                 }, {
                   default: _withCtx$4(() => [...(_cache[30] || (_cache[30] = [
                     _createTextVNode$4("取消", -1)
@@ -1022,9 +1108,9 @@ return (_ctx, _cache) => {
 }
 
 };
-const ProviderEditorDialog = /*#__PURE__*/_export_sfc(_sfc_main$4, [['__scopeId',"data-v-a5025a9e"]]);
+const ProviderEditorDialog = /*#__PURE__*/_export_sfc(_sfc_main$4, [['__scopeId',"data-v-233a16b0"]]);
 
-const {createElementVNode:_createElementVNode$3,renderList:_renderList$2,Fragment:_Fragment$2,openBlock:_openBlock$3,createElementBlock:_createElementBlock$2,resolveComponent:_resolveComponent$3,createVNode:_createVNode$3,createCommentVNode:_createCommentVNode$2,toDisplayString:_toDisplayString$3,normalizeClass:_normalizeClass$2,unref:_unref$2,createTextVNode:_createTextVNode$3,mergeProps:_mergeProps,withCtx:_withCtx$3,createBlock:_createBlock$3} = await importShared('vue');
+const {createElementVNode:_createElementVNode$3,renderList:_renderList$2,Fragment:_Fragment$2,openBlock:_openBlock$3,createElementBlock:_createElementBlock$2,resolveComponent:_resolveComponent$3,createVNode:_createVNode$3,createCommentVNode:_createCommentVNode$2,toDisplayString:_toDisplayString$3,normalizeClass:_normalizeClass$2,unref:_unref$2,createTextVNode:_createTextVNode$3,mergeProps:_mergeProps,withCtx:_withCtx$3,createBlock:_createBlock$3,withModifiers:_withModifiers$1} = await importShared('vue');
 
 
 const _hoisted_1$3 = { class: "provider-table-scroll" };
@@ -1050,10 +1136,11 @@ const _hoisted_13$1 = {
   key: 1,
   class: "text-medium-emphasis"
 };
-const _hoisted_14$1 = { class: "text-right" };
-const _hoisted_15$1 = { key: 0 };
+const _hoisted_14$1 = { class: "text-right col-actions" };
+const _hoisted_15$1 = { class: "col-actions-inner" };
+const _hoisted_16$1 = { key: 0 };
 
-const {computed: computed$3} = await importShared('vue');
+const {computed: computed$3,ref: ref$2} = await importShared('vue');
 
 
 const _sfc_main$3 = {
@@ -1071,16 +1158,50 @@ const _sfc_main$3 = {
     type: Array,
     default: () => [],
   },
+  maxFailures: {
+    type: Number,
+    default: 3,
+  },
 },
-  emits: ['reset', 'select', 'open-vendor-edit'],
+  emits: ['reset', 'select', 'open-vendor-edit', 'test'],
   setup(__props, { emit: __emit }) {
 
 const props = __props;
 
 const emit = __emit;
 
+const testingId = ref$2(null);
+
+async function handleTest(row) {
+  if (testingId.value) return
+  testingId.value = row.id;
+  try {
+    await new Promise((resolve, reject) => {
+      emit('test', { providerId: row.id, resolve, reject });
+    });
+    // 测试结果提示由父组件统一处理
+  } catch (_) {
+    // 错误提示由父组件统一处理
+  } finally {
+    testingId.value = null;
+  }
+}
+
 // 仅展示已启用的供应商，已停用供应商不显示在用量列表中
-const displayRows = computed$3(() => (props.providerRows || []).filter(row => row.enabled !== false));
+// 排序：正常(紫色) > 缺配置(黄色) > 故障/耗尽(红色)，同组保持原始顺序
+const displayRows = computed$3(() => {
+  const rows = (props.providerRows || []).filter(row => row.enabled !== false);
+  return [...rows].sort((a, b) => {
+    const aFaulty = (a.usage?.failure_count || 0) >= props.maxFailures || a.usage?.exhausted;
+    const bFaulty = (b.usage?.failure_count || 0) >= props.maxFailures || b.usage?.exhausted;
+    const aMisconf = !a.api_key || !a.base_url || !a.model;
+    const bMisconf = !b.api_key || !b.base_url || !b.model;
+    // 三级排序：正常(0) > 缺配置(1) > 故障(2)
+    const aRank = aFaulty ? 2 : (aMisconf ? 1 : 0);
+    const bRank = bFaulty ? 2 : (bMisconf ? 1 : 0);
+    return aRank - bRank
+  })
+});
 
 // 安全获取模型名称字符串，防止 VCombobox 返回对象导致显示 [object Object]
 function getModelName(model) {
@@ -1096,7 +1217,7 @@ function getModelName(model) {
 function rowStatusColor(row) {
   if (!row.enabled) return 'default'
   if (row.usage?.exhausted) return 'error'
-  if (row.usage?.failure_count >= 3) return 'warning'
+  if ((row.usage?.failure_count || 0) >= props.maxFailures) return 'error'
   if (!row.api_key || !row.base_url || !row.model) return 'warning'
   return 'success'
 }
@@ -1105,7 +1226,7 @@ function rowStatusColor(row) {
 function rowStatusText(row) {
   if (!row.enabled) return '停用'
   if (row.usage?.exhausted) return '耗尽'
-  if (row.usage?.failure_count >= 3) return '故障'
+  if ((row.usage?.failure_count || 0) >= props.maxFailures) return '故障'
   if (!row.api_key || !row.base_url || !row.model) return '缺配置'
   return '可用'
 }
@@ -1123,13 +1244,22 @@ function isFailed(row) {
 // 点击 ○ 切换活跃供应商（仅启用状态可点击）
 function handleSelect(row) {
   if (!row.enabled) return
-  if (row.usage?.failure_count >= 3) return
+  if ((row.usage?.failure_count || 0) >= props.maxFailures) return
   emit('select', row.id);
 }
 
-// 判断是否为故障状态（失败次数 >= 3）
+// 判断是否为故障状态（连续失败达到阈值或额度耗尽或已停用）
+// 与 rowStatusColor / rowStatusText 的故障判定保持一致
 function isFaulty(row) {
-  return row.usage?.failure_count >= 3
+  if (!row.enabled) return true
+  if (row.usage?.exhausted) return true
+  if ((row.usage?.failure_count || 0) >= props.maxFailures) return true
+  return false
+}
+
+// 判断供应商是否缺少必要配置（无 api_key / base_url / model）
+function isMisconfigured(row) {
+  return !row?.api_key || !row?.base_url || !row?.model
 }
 
 // 点击名称列：通知父组件切换到供应商 Tab 并打开编辑弹窗
@@ -1153,7 +1283,10 @@ return (_ctx, _cache) => {
   }, {
     default: _withCtx$3(() => [
       _createElementVNode$3("div", _hoisted_1$3, [
-        _createVNode$3(_component_VTable, { density: "comfortable" }, {
+        _createVNode$3(_component_VTable, {
+          density: "comfortable",
+          "fixed-header": ""
+        }, {
           default: _withCtx$3(() => [
             _cache[2] || (_cache[2] = _createElementVNode$3("thead", null, [
               _createElementVNode$3("tr", null, [
@@ -1168,7 +1301,7 @@ return (_ctx, _cache) => {
                 _createElementVNode$3("th", null, "最后错误"),
                 _createElementVNode$3("th", null, "最后使用"),
                 _createElementVNode$3("th", null, "状态"),
-                _createElementVNode$3("th", { class: "text-right" }, "操作")
+                _createElementVNode$3("th", { class: "text-right col-actions-header" }, "操作")
               ])
             ], -1)),
             _createElementVNode$3("tbody", null, [
@@ -1202,9 +1335,12 @@ return (_ctx, _cache) => {
                   ]),
                   _createElementVNode$3("td", _hoisted_5$3, [
                     _createElementVNode$3("span", {
-                      class: "name-link",
+                      class: _normalizeClass$2(["name-link", {
+                  'name-link--faulty': isFaulty(row),
+                  'name-link--misconfigured': !isFaulty(row) && isMisconfigured(row),
+                }]),
                       onClick: $event => (handleNameClick(row))
-                    }, _toDisplayString$3(row.name), 9, _hoisted_6$3)
+                    }, _toDisplayString$3(row.name), 11, _hoisted_6$3)
                   ]),
                   _createElementVNode$3("td", null, _toDisplayString$3(getModelName(row.model)), 1),
                   _createElementVNode$3("td", null, _toDisplayString$3(_unref$2(formatTokens)(row.usage?.total_tokens)), 1),
@@ -1259,19 +1395,29 @@ return (_ctx, _cache) => {
                     }, 1032, ["color"])
                   ]),
                   _createElementVNode$3("td", _hoisted_14$1, [
-                    _createVNode$3(_component_VBtn, {
-                      icon: "mdi-backup-restore",
-                      size: "small",
-                      variant: "text",
-                      onClick: $event => (emit('reset', row.id, index))
-                    }, null, 8, ["onClick"])
+                    _createElementVNode$3("div", _hoisted_15$1, [
+                      _createVNode$3(_component_VBtn, {
+                        icon: "mdi-connection",
+                        size: "small",
+                        variant: "text",
+                        loading: testingId.value === row.id,
+                        disabled: testingId.value !== null,
+                        onClick: _withModifiers$1($event => (handleTest(row)), ["stop"])
+                      }, null, 8, ["loading", "disabled", "onClick"]),
+                      _createVNode$3(_component_VBtn, {
+                        icon: "mdi-backup-restore",
+                        size: "small",
+                        variant: "text",
+                        onClick: $event => (emit('reset', row.id, index))
+                      }, null, 8, ["onClick"])
+                    ])
                   ])
                 ], 2))
               }), 128)),
               (!displayRows.value.length)
-                ? (_openBlock$3(), _createElementBlock$2("tr", _hoisted_15$1, [...(_cache[1] || (_cache[1] = [
+                ? (_openBlock$3(), _createElementBlock$2("tr", _hoisted_16$1, [...(_cache[1] || (_cache[1] = [
                     _createElementVNode$3("td", {
-                      colspan: "13",
+                      colspan: "12",
                       class: "text-center text-medium-emphasis py-8"
                     }, "暂无已启用供应商", -1)
                   ]))]))
@@ -1288,7 +1434,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const ProviderUsageTable = /*#__PURE__*/_export_sfc(_sfc_main$3, [['__scopeId',"data-v-451711e3"]]);
+const ProviderUsageTable = /*#__PURE__*/_export_sfc(_sfc_main$3, [['__scopeId',"data-v-38547cee"]]);
 
 const {toDisplayString:_toDisplayString$2,createElementVNode:_createElementVNode$2,resolveComponent:_resolveComponent$2,withCtx:_withCtx$2,createVNode:_createVNode$2,unref:_unref$1,createTextVNode:_createTextVNode$2,openBlock:_openBlock$2,createBlock:_createBlock$2} = await importShared('vue');
 
@@ -1421,7 +1567,7 @@ const _hoisted_10$1 = {
 const _hoisted_11$1 = { key: 0 };
 const _hoisted_12$1 = ["colspan"];
 
-const {computed: computed$1,ref: ref$1,watch: watch$1} = await importShared('vue');
+const {computed: computed$1,ref: ref$1,watch: watch$1,onMounted: onMounted$1,nextTick: nextTick$1} = await importShared('vue');
 
 
 
@@ -1444,6 +1590,10 @@ const _sfc_main$1 = {
     type: String,
     default: 'plugin/AgentTokensPro',
   },
+  visible: {
+    type: Boolean,
+    default: true,
+  },
 },
   emits: ['refresh', 'error', 'drag-mode-change'],
   setup(__props, { expose: __expose, emit: __emit }) {
@@ -1463,6 +1613,10 @@ const saving = ref$1(false);
 const feedback = ref$1({ type: '', message: '', show: false });
 // 标记是否有本地未保存的变更（新增/编辑中），防止 watcher 覆盖
 const hasLocalChanges = ref$1(false);
+// 删除确认弹窗
+const showDeleteConfirm = ref$1(false);
+const deleteVendorId = ref$1(null);
+const deleteVendorName = ref$1('');
 
 // 同步 props.vendors 到 localVendors（仅在无本地变更时同步）
 watch$1(() => props.vendors, (next) => {
@@ -1474,6 +1628,13 @@ watch$1(() => props.vendors, (next) => {
   if (nextStr === curStr) return
   localVendors.value = next.map(v => ({ ...v }));
 }, { immediate: true });
+
+// 当组件不可见时（切换到其他 tab），清理未填写数据的临时新增行
+watch$1(() => props.visible, (visible) => {
+  if (!visible) {
+    cleanupEmptyVendors();
+  }
+});
 
 const displayVendors = computed$1(() => {
   return [...localVendors.value].sort((a, b) => {
@@ -1521,6 +1682,37 @@ function cancelEdit() {
   hasLocalChanges.value = false;
 }
 
+// 清理未填写数据的临时新增行（切换 tab 时由父组件调用）
+function cleanupEmptyVendors() {
+  // 切换 tab 前，将编辑缓冲区同步回本地列表，保留用户已输入的内容
+  if (editingId.value && editBuffer.value.id) {
+    localVendors.value = localVendors.value.map(v =>
+      v.id === editingId.value ? { ...v, ...editBuffer.value } : v
+    );
+  }
+
+  const hadTemp = localVendors.value.some(v => String(v.id).startsWith('temp_'));
+  if (!hadTemp) return
+
+  localVendors.value = localVendors.value.filter(v => {
+    if (!String(v.id).startsWith('temp_')) return true
+    // 保留已填写名称或 URL 的临时行
+    return v.name?.trim() || v.url?.trim()
+  });
+
+  // 如果正在编辑的行被移除，取消编辑状态
+  if (editingId.value && !localVendors.value.find(v => v.id === editingId.value)) {
+    editingId.value = null;
+    editBuffer.value = {};
+  }
+
+  // 没有临时行残留时清除本地变更标记，允许 watcher 恢复同步
+  const hasRemainingTemp = localVendors.value.some(v => String(v.id).startsWith('temp_'));
+  if (!hasRemainingTemp) {
+    hasLocalChanges.value = false;
+  }
+}
+
 async function saveEdit() {
   if (!editBuffer.value.name?.trim()) {
     showFeedback('error', '厂商名称不能为空');
@@ -1548,13 +1740,21 @@ async function saveEdit() {
   }
 }
 
-async function removeVendor(vendor) {
-  if (!confirm(`确定删除厂商「${vendor.name}」？`)) return
+function requestDeleteVendor(vendor) {
+  deleteVendorId.value = vendor.id;
+  deleteVendorName.value = vendor.name || '未命名';
+  showDeleteConfirm.value = true;
+}
+
+async function confirmDeleteVendor() {
+  const id = deleteVendorId.value;
+  showDeleteConfirm.value = false;
+  if (!id) return
   saving.value = true;
   try {
-    const response = await props.api.post(`${props.pluginBase}/vendors/delete`, { id: vendor.id });
+    const response = await props.api.post(`${props.pluginBase}/vendors/delete`, { id });
     if (response?.success) {
-      localVendors.value = response.data.vendors || localVendors.value.filter(v => v.id !== vendor.id);
+      localVendors.value = response.data.vendors || localVendors.value.filter(v => v.id !== id);
       showFeedback('success', '删除成功');
     } else {
       showFeedback('error', response?.message || '删除失败');
@@ -1563,6 +1763,8 @@ async function removeVendor(vendor) {
     showFeedback('error', `删除失败: ${err.message}`);
   } finally {
     saving.value = false;
+    deleteVendorId.value = null;
+    deleteVendorName.value = '';
   }
 }
 
@@ -1667,7 +1869,9 @@ function rowClasses(index) {
 __expose({
   addVendor,
   toggleDragMode,
+  cleanupEmptyVendors,
 });
+
 
 return (_ctx, _cache) => {
   const _component_VAlert = _resolveComponent$1("VAlert");
@@ -1677,6 +1881,11 @@ return (_ctx, _cache) => {
   const _component_VBtn = _resolveComponent$1("VBtn");
   const _component_VTable = _resolveComponent$1("VTable");
   const _component_VSheet = _resolveComponent$1("VSheet");
+  const _component_VCardTitle = _resolveComponent$1("VCardTitle");
+  const _component_VCardText = _resolveComponent$1("VCardText");
+  const _component_VCardActions = _resolveComponent$1("VCardActions");
+  const _component_VCard = _resolveComponent$1("VCard");
+  const _component_VDialog = _resolveComponent$1("VDialog");
 
   return (_openBlock$1(), _createElementBlock$1("div", _hoisted_1$1, [
     _createVNode$1(_component_VSlideYTransition, null, {
@@ -1716,10 +1925,10 @@ return (_ctx, _cache) => {
                   (dragMode.value)
                     ? (_openBlock$1(), _createElementBlock$1("th", _hoisted_2$1))
                     : _createCommentVNode$1("", true),
-                  _cache[5] || (_cache[5] = _createElementVNode$1("th", { class: "enable-col" }, "启用", -1)),
-                  _cache[6] || (_cache[6] = _createElementVNode$1("th", { class: "name-col" }, "名称", -1)),
-                  _cache[7] || (_cache[7] = _createElementVNode$1("th", { class: "url-col" }, "API 地址", -1)),
-                  _cache[8] || (_cache[8] = _createElementVNode$1("th", { class: "action-col text-right" }, "操作", -1))
+                  _cache[7] || (_cache[7] = _createElementVNode$1("th", { class: "enable-col" }, "启用", -1)),
+                  _cache[8] || (_cache[8] = _createElementVNode$1("th", { class: "name-col" }, "名称", -1)),
+                  _cache[9] || (_cache[9] = _createElementVNode$1("th", { class: "url-col" }, "API 地址", -1)),
+                  _cache[10] || (_cache[10] = _createElementVNode$1("th", { class: "action-col text-right" }, "操作", -1))
                 ])
               ]),
               _createElementVNode$1("tbody", null, [
@@ -1821,7 +2030,7 @@ return (_ctx, _cache) => {
                               size: "small",
                               variant: "text",
                               color: "error",
-                              onClick: $event => (removeVendor(vendor))
+                              onClick: $event => (requestDeleteVendor(vendor))
                             }, null, 8, ["onClick"])
                           ], 64))
                     ])
@@ -1842,13 +2051,65 @@ return (_ctx, _cache) => {
         ], 2)
       ]),
       _: 1
-    })
+    }),
+    _createVNode$1(_component_VDialog, {
+      modelValue: showDeleteConfirm.value,
+      "onUpdate:modelValue": _cache[6] || (_cache[6] = $event => ((showDeleteConfirm).value = $event)),
+      "max-width": "420",
+      persistent: ""
+    }, {
+      default: _withCtx$1(() => [
+        _createVNode$1(_component_VCard, null, {
+          default: _withCtx$1(() => [
+            _createVNode$1(_component_VCardTitle, { class: "text-subtitle-1" }, {
+              default: _withCtx$1(() => [...(_cache[11] || (_cache[11] = [
+                _createTextVNode$1("确认删除", -1)
+              ]))]),
+              _: 1
+            }),
+            _createVNode$1(_component_VCardText, null, {
+              default: _withCtx$1(() => [
+                _cache[12] || (_cache[12] = _createTextVNode$1(" 确定要删除厂商「", -1)),
+                _createElementVNode$1("strong", null, _toDisplayString$1(deleteVendorName.value), 1),
+                _cache[13] || (_cache[13] = _createTextVNode$1("」吗？此操作不可撤销。 ", -1))
+              ]),
+              _: 1
+            }),
+            _createVNode$1(_component_VCardActions, { class: "d-flex justify-end ga-2" }, {
+              default: _withCtx$1(() => [
+                _createVNode$1(_component_VBtn, {
+                  variant: "text",
+                  onClick: _cache[5] || (_cache[5] = $event => (showDeleteConfirm.value = false))
+                }, {
+                  default: _withCtx$1(() => [...(_cache[14] || (_cache[14] = [
+                    _createTextVNode$1("取消", -1)
+                  ]))]),
+                  _: 1
+                }),
+                _createVNode$1(_component_VBtn, {
+                  color: "error",
+                  onClick: confirmDeleteVendor
+                }, {
+                  default: _withCtx$1(() => [...(_cache[15] || (_cache[15] = [
+                    _createTextVNode$1("删除", -1)
+                  ]))]),
+                  _: 1
+                })
+              ]),
+              _: 1
+            })
+          ]),
+          _: 1
+        })
+      ]),
+      _: 1
+    }, 8, ["modelValue"])
   ]))
 }
 }
 
 };
-const VendorManager = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-dab7e7e1"]]);
+const VendorManager = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-0eec1d3a"]]);
 
 const {createElementVNode:_createElementVNode,resolveComponent:_resolveComponent,createVNode:_createVNode,openBlock:_openBlock,createElementBlock:_createElementBlock,createCommentVNode:_createCommentVNode,toDisplayString:_toDisplayString,createTextVNode:_createTextVNode,withCtx:_withCtx,createBlock:_createBlock,unref:_unref,renderList:_renderList,Fragment:_Fragment,normalizeClass:_normalizeClass} = await importShared('vue');
 
@@ -1942,8 +2203,9 @@ const _sfc_main = {
   'query-models',
   'test-connection',
   'select-provider',
+  'test-provider',
 ],
-  setup(__props, { emit: __emit }) {
+  setup(__props, { expose: __expose, emit: __emit }) {
 
 const props = __props;
 
@@ -1955,8 +2217,13 @@ const editorIndex = ref(-1);
 const editedProvider = ref(createProvider());
 const failedProviderIds = ref([]);
 const testFeedback = ref({ type: '', message: '', show: false });
+
+__expose({ failedProviderIds, testFeedback });
 const dragMode = ref(false);
 const importFileInput = ref(null);
+const showDeleteProviderConfirm = ref(false);
+const deleteProviderIndex = ref(-1);
+const deleteProviderName = ref('');
 // 单一数据源：表格始终绑定此数组，拖拽/编辑都直接操作它
 const localProviders = ref([]);
 // 厂商管理 ref
@@ -2008,9 +2275,20 @@ watch(providers, (next) => {
   localProviders.value = next.map(p => ({ ...p }));
 }, { immediate: true });
 
+// 切换离开厂商 Tab 时清理未填写数据的临时新增行
+// 使用 flush: 'post' 确保 DOM 更新完成后执行，避免 VWindow 过渡动画期间 ref 不可用
+watch(activeTab, async (newTab, oldTab) => {
+  if (oldTab === 'vendors' && newTab !== 'vendors') {
+    await nextTick();
+    if (vendorRef.value?.cleanupEmptyVendors) {
+      vendorRef.value.cleanupEmptyVendors();
+    }
+  }
+}, { flush: 'post' });
+
 function showTestFeedback(type, message) {
   testFeedback.value = { type, message, show: true };
-  setTimeout(() => { testFeedback.value.show = false; }, 3000);
+  setTimeout(() => { testFeedback.value.show = false; }, 5000);
 }
 
 // 重置弹窗表单为默认值，关闭弹窗。
@@ -2153,11 +2431,24 @@ async function handleImportFile(event) {
   reader.readAsText(file);
 }
 
-// 从配置列表中移除一个供应商。
+// 从配置列表中移除一个供应商（弹出二次确认）。
 function removeProvider(index) {
+  const provider = localProviders.value[index];
+  deleteProviderIndex.value = index;
+  deleteProviderName.value = provider?.name || '未命名';
+  showDeleteProviderConfirm.value = true;
+}
+
+// 确认删除供应商
+function confirmDeleteProvider() {
+  const index = deleteProviderIndex.value;
+  if (index < 0) return
   const nextProviders = [...localProviders.value];
   nextProviders.splice(index, 1);
   configValue.value.providers = nextProviders;
+  showDeleteProviderConfirm.value = false;
+  deleteProviderIndex.value = -1;
+  deleteProviderName.value = '';
   emit('auto-save');
 }
 
@@ -2268,23 +2559,28 @@ return (_ctx, _cache) => {
   const _component_VSpacer = _resolveComponent("VSpacer");
   const _component_VBtn = _resolveComponent("VBtn");
   const _component_VAlert = _resolveComponent("VAlert");
-  const _component_VSlideYTransition = _resolveComponent("VSlideYTransition");
   const _component_VSwitch = _resolveComponent("VSwitch");
   const _component_VIcon = _resolveComponent("VIcon");
   const _component_VTextField = _resolveComponent("VTextField");
   const _component_VSheet = _resolveComponent("VSheet");
+  const _component_VSlideYTransition = _resolveComponent("VSlideYTransition");
   const _component_VTab = _resolveComponent("VTab");
   const _component_VTabs = _resolveComponent("VTabs");
   const _component_VDivider = _resolveComponent("VDivider");
   const _component_VWindowItem = _resolveComponent("VWindowItem");
   const _component_VWindow = _resolveComponent("VWindow");
+  const _component_VCardTitle = _resolveComponent("VCardTitle");
+  const _component_VCardText = _resolveComponent("VCardText");
+  const _component_VCardActions = _resolveComponent("VCardActions");
+  const _component_VCard = _resolveComponent("VCard");
+  const _component_VDialog = _resolveComponent("VDialog");
 
   return (_openBlock(), _createElementBlock("div", {
     class: _normalizeClass(["agenttokens-page", { 'is-mobile': isMobile.value }])
   }, [
     (!__props.hideTitle)
       ? (_openBlock(), _createElementBlock("div", _hoisted_1, [
-          _cache[13] || (_cache[13] = _createElementVNode("h2", { class: "text-2xl font-bold leading-7 text-gray-100 truncate sm:text-3xl sm:leading-9" }, [
+          _cache[16] || (_cache[16] = _createElementVNode("h2", { class: "text-2xl font-bold leading-7 text-gray-100 truncate sm:text-3xl sm:leading-9" }, [
             _createElementVNode("span", { class: "text-moviepilot" }, "Agent Tokens 管理")
           ], -1)),
           _createVNode(_component_VSpacer),
@@ -2316,27 +2612,6 @@ return (_ctx, _cache) => {
           _: 1
         }))
       : _createCommentVNode("", true),
-    _createVNode(_component_VSlideYTransition, null, {
-      default: _withCtx(() => [
-        (testFeedback.value.show)
-          ? (_openBlock(), _createBlock(_component_VAlert, {
-              key: 0,
-              type: testFeedback.value.type,
-              variant: "tonal",
-              density: "compact",
-              class: "mb-3",
-              closable: "",
-              "onClick:close": _cache[2] || (_cache[2] = $event => (testFeedback.value.show = false))
-            }, {
-              default: _withCtx(() => [
-                _createTextVNode(_toDisplayString(testFeedback.value.message), 1)
-              ]),
-              _: 1
-            }, 8, ["type"]))
-          : _createCommentVNode("", true)
-      ]),
-      _: 1
-    }),
     _createVNode(_component_VSheet, {
       border: "",
       rounded: "",
@@ -2345,20 +2620,20 @@ return (_ctx, _cache) => {
       default: _withCtx(() => [
         _createElementVNode("div", _hoisted_2, [
           _createElementVNode("div", _hoisted_3, [
-            _cache[14] || (_cache[14] = _createElementVNode("span", { class: "switch-label" }, "启用插件", -1)),
+            _cache[17] || (_cache[17] = _createElementVNode("span", { class: "switch-label" }, "启用插件", -1)),
             _createVNode(_component_VSwitch, {
               modelValue: configValue.value.enabled,
-              "onUpdate:modelValue": _cache[3] || (_cache[3] = $event => ((configValue.value.enabled) = $event)),
+              "onUpdate:modelValue": _cache[2] || (_cache[2] = $event => ((configValue.value.enabled) = $event)),
               color: "primary",
               "hide-details": "",
               inset: ""
             }, null, 8, ["modelValue"])
           ]),
           _createElementVNode("div", _hoisted_4, [
-            _cache[15] || (_cache[15] = _createElementVNode("span", { class: "switch-label" }, "侧边栏入口", -1)),
+            _cache[18] || (_cache[18] = _createElementVNode("span", { class: "switch-label" }, "侧边栏入口", -1)),
             _createVNode(_component_VSwitch, {
               modelValue: configValue.value.show_sidebar_nav,
-              "onUpdate:modelValue": _cache[4] || (_cache[4] = $event => ((configValue.value.show_sidebar_nav) = $event)),
+              "onUpdate:modelValue": _cache[3] || (_cache[3] = $event => ((configValue.value.show_sidebar_nav) = $event)),
               color: "primary",
               "hide-details": "",
               inset: ""
@@ -2373,15 +2648,15 @@ return (_ctx, _cache) => {
                 color: "info",
                 size: "small"
               }),
-              _cache[16] || (_cache[16] = _createElementVNode("span", null, "限量总额度", -1))
+              _cache[19] || (_cache[19] = _createElementVNode("span", null, "限量总额度", -1))
             ]),
             _createElementVNode("span", _hoisted_8, _toDisplayString(displaySummary.value.total_limit ? _unref(formatTokens)(displaySummary.value.total_limit) : '不限'), 1)
           ]),
           _createElementVNode("div", _hoisted_9, [
-            _cache[17] || (_cache[17] = _createElementVNode("span", { class: "config-label" }, "失败切换阈值", -1)),
+            _cache[20] || (_cache[20] = _createElementVNode("span", { class: "config-label" }, "失败切换阈值", -1)),
             _createVNode(_component_VTextField, {
               modelValue: configValue.value.max_failures,
-              "onUpdate:modelValue": _cache[5] || (_cache[5] = $event => ((configValue.value.max_failures) = $event)),
+              "onUpdate:modelValue": _cache[4] || (_cache[4] = $event => ((configValue.value.max_failures) = $event)),
               modelModifiers: { number: true },
               type: "number",
               min: "1",
@@ -2413,7 +2688,7 @@ return (_ctx, _cache) => {
             color: "success"
           }),
           _createElementVNode("div", null, [
-            _cache[18] || (_cache[18] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "可用供应商", -1)),
+            _cache[21] || (_cache[21] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "可用供应商", -1)),
             _createElementVNode("div", _hoisted_11, _toDisplayString(displaySummary.value.available_count || 0) + " / " + _toDisplayString(displaySummary.value.enabled_count || 0), 1)
           ])
         ]),
@@ -2430,7 +2705,7 @@ return (_ctx, _cache) => {
             color: "primary"
           }),
           _createElementVNode("div", null, [
-            _cache[19] || (_cache[19] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "累计使用", -1)),
+            _cache[22] || (_cache[22] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "累计使用", -1)),
             _createElementVNode("div", _hoisted_12, _toDisplayString(_unref(formatTokens)(displaySummary.value.total_used)), 1),
             _createElementVNode("div", _hoisted_13, " 限量 " + _toDisplayString(_unref(formatTokens)(limitedUsed.value)) + " / 不限量 " + _toDisplayString(_unref(formatTokens)(unlimitedUsed.value)), 1)
           ])
@@ -2438,6 +2713,27 @@ return (_ctx, _cache) => {
         _: 1
       })
     ]),
+    _createVNode(_component_VSlideYTransition, null, {
+      default: _withCtx(() => [
+        (testFeedback.value.show)
+          ? (_openBlock(), _createBlock(_component_VAlert, {
+              key: 0,
+              type: testFeedback.value.type,
+              variant: "tonal",
+              density: "compact",
+              class: "my-2",
+              closable: "",
+              "onClick:close": _cache[5] || (_cache[5] = $event => (testFeedback.value.show = false))
+            }, {
+              default: _withCtx(() => [
+                _createTextVNode(_toDisplayString(testFeedback.value.message), 1)
+              ]),
+              _: 1
+            }, 8, ["type"]))
+          : _createCommentVNode("", true)
+      ]),
+      _: 1
+    }),
     _createVNode(_component_VSheet, {
       border: "",
       rounded: "",
@@ -2467,12 +2763,12 @@ return (_ctx, _cache) => {
                       }, {
                         default: _withCtx(() => [
                           _createVNode(_component_VIcon, { size: "18" }, {
-                            default: _withCtx(() => [...(_cache[20] || (_cache[20] = [
+                            default: _withCtx(() => [...(_cache[23] || (_cache[23] = [
                               _createTextVNode("mdi-export", -1)
                             ]))]),
                             _: 1
                           }),
-                          _cache[21] || (_cache[21] = _createElementVNode("span", null, "导出", -1))
+                          _cache[24] || (_cache[24] = _createElementVNode("span", null, "导出", -1))
                         ]),
                         _: 1
                       }),
@@ -2485,12 +2781,12 @@ return (_ctx, _cache) => {
                       }, {
                         default: _withCtx(() => [
                           _createVNode(_component_VIcon, { size: "18" }, {
-                            default: _withCtx(() => [...(_cache[22] || (_cache[22] = [
+                            default: _withCtx(() => [...(_cache[25] || (_cache[25] = [
                               _createTextVNode("mdi-import", -1)
                             ]))]),
                             _: 1
                           }),
-                          _cache[23] || (_cache[23] = _createElementVNode("span", null, "导入", -1))
+                          _cache[26] || (_cache[26] = _createElementVNode("span", null, "导入", -1))
                         ]),
                         _: 1
                       }),
@@ -2515,12 +2811,12 @@ return (_ctx, _cache) => {
                       }, {
                         default: _withCtx(() => [
                           _createVNode(_component_VIcon, { size: "18" }, {
-                            default: _withCtx(() => [...(_cache[24] || (_cache[24] = [
+                            default: _withCtx(() => [...(_cache[27] || (_cache[27] = [
                               _createTextVNode("mdi-plus", -1)
                             ]))]),
                             _: 1
                           }),
-                          _cache[25] || (_cache[25] = _createElementVNode("span", null, "新增", -1))
+                          _cache[28] || (_cache[28] = _createElementVNode("span", null, "新增", -1))
                         ]),
                         _: 1
                       }),
@@ -2533,7 +2829,7 @@ return (_ctx, _cache) => {
                       }, {
                         default: _withCtx(() => [
                           _createVNode(_component_VIcon, { size: "18" }, {
-                            default: _withCtx(() => [...(_cache[26] || (_cache[26] = [
+                            default: _withCtx(() => [...(_cache[29] || (_cache[29] = [
                               _createTextVNode("mdi-sort", -1)
                             ]))]),
                             _: 1
@@ -2551,12 +2847,12 @@ return (_ctx, _cache) => {
                       }, {
                         default: _withCtx(() => [
                           _createVNode(_component_VIcon, { size: "18" }, {
-                            default: _withCtx(() => [...(_cache[27] || (_cache[27] = [
+                            default: _withCtx(() => [...(_cache[30] || (_cache[30] = [
                               _createTextVNode("mdi-backup-restore", -1)
                             ]))]),
                             _: 1
                           }),
-                          _cache[28] || (_cache[28] = _createElementVNode("span", null, "重置", -1))
+                          _cache[31] || (_cache[31] = _createElementVNode("span", null, "重置", -1))
                         ]),
                         _: 1
                       })
@@ -2573,12 +2869,12 @@ return (_ctx, _cache) => {
                       }, {
                         default: _withCtx(() => [
                           _createVNode(_component_VIcon, { size: "18" }, {
-                            default: _withCtx(() => [...(_cache[29] || (_cache[29] = [
+                            default: _withCtx(() => [...(_cache[32] || (_cache[32] = [
                               _createTextVNode("mdi-plus", -1)
                             ]))]),
                             _: 1
                           }),
-                          _cache[30] || (_cache[30] = _createElementVNode("span", null, "新增", -1))
+                          _cache[33] || (_cache[33] = _createElementVNode("span", null, "新增", -1))
                         ]),
                         _: 1
                       }, 8, ["onClick"]),
@@ -2591,7 +2887,7 @@ return (_ctx, _cache) => {
                       }, {
                         default: _withCtx(() => [
                           _createVNode(_component_VIcon, { size: "18" }, {
-                            default: _withCtx(() => [...(_cache[31] || (_cache[31] = [
+                            default: _withCtx(() => [...(_cache[34] || (_cache[34] = [
                               _createTextVNode("mdi-sort", -1)
                             ]))]),
                             _: 1
@@ -2612,19 +2908,19 @@ return (_ctx, _cache) => {
               }, {
                 default: _withCtx(() => [
                   _createVNode(_component_VTab, { value: "usage" }, {
-                    default: _withCtx(() => [...(_cache[32] || (_cache[32] = [
+                    default: _withCtx(() => [...(_cache[35] || (_cache[35] = [
                       _createTextVNode("总览", -1)
                     ]))]),
                     _: 1
                   }),
                   _createVNode(_component_VTab, { value: "config" }, {
-                    default: _withCtx(() => [...(_cache[33] || (_cache[33] = [
+                    default: _withCtx(() => [...(_cache[36] || (_cache[36] = [
                       _createTextVNode("供应商", -1)
                     ]))]),
                     _: 1
                   }),
                   _createVNode(_component_VTab, { value: "vendors" }, {
-                    default: _withCtx(() => [...(_cache[34] || (_cache[34] = [
+                    default: _withCtx(() => [...(_cache[37] || (_cache[37] = [
                       _createTextVNode("厂商", -1)
                     ]))]),
                     _: 1
@@ -2641,7 +2937,7 @@ return (_ctx, _cache) => {
                         variant: "tonal",
                         onClick: handleExport
                       }, {
-                        default: _withCtx(() => [...(_cache[35] || (_cache[35] = [
+                        default: _withCtx(() => [...(_cache[38] || (_cache[38] = [
                           _createTextVNode(" 导出配置 ", -1)
                         ]))]),
                         _: 1
@@ -2652,7 +2948,7 @@ return (_ctx, _cache) => {
                         variant: "tonal",
                         onClick: handleImportClick
                       }, {
-                        default: _withCtx(() => [...(_cache[36] || (_cache[36] = [
+                        default: _withCtx(() => [...(_cache[39] || (_cache[39] = [
                           _createTextVNode(" 导入配置 ", -1)
                         ]))]),
                         _: 1
@@ -2675,7 +2971,7 @@ return (_ctx, _cache) => {
                         variant: "tonal",
                         onClick: addProvider
                       }, {
-                        default: _withCtx(() => [...(_cache[37] || (_cache[37] = [
+                        default: _withCtx(() => [...(_cache[40] || (_cache[40] = [
                           _createTextVNode(" 新增 ", -1)
                         ]))]),
                         _: 1
@@ -2697,7 +2993,7 @@ return (_ctx, _cache) => {
                         variant: "tonal",
                         onClick: resetAllUsage
                       }, {
-                        default: _withCtx(() => [...(_cache[38] || (_cache[38] = [
+                        default: _withCtx(() => [...(_cache[41] || (_cache[41] = [
                           _createTextVNode(" 重置用量 ", -1)
                         ]))]),
                         _: 1
@@ -2712,7 +3008,7 @@ return (_ctx, _cache) => {
                         variant: "tonal",
                         onClick: vendorRef.value?.addVendor
                       }, {
-                        default: _withCtx(() => [...(_cache[39] || (_cache[39] = [
+                        default: _withCtx(() => [...(_cache[42] || (_cache[42] = [
                           _createTextVNode(" 新增 ", -1)
                         ]))]),
                         _: 1
@@ -2735,7 +3031,7 @@ return (_ctx, _cache) => {
         _createVNode(_component_VDivider),
         _createVNode(_component_VWindow, {
           modelValue: activeTab.value,
-          "onUpdate:modelValue": _cache[9] || (_cache[9] = $event => ((activeTab).value = $event)),
+          "onUpdate:modelValue": _cache[10] || (_cache[10] = $event => ((activeTab).value = $event)),
           touch: false,
           class: "agenttokens-window"
         }, {
@@ -2746,10 +3042,12 @@ return (_ctx, _cache) => {
                   "provider-rows": displayProviderRows.value,
                   "active-provider-id": __props.activeProviderId,
                   "failed-provider-ids": failedProviderIds.value,
+                  "max-failures": configValue.value.max_failures || 3,
                   onReset: resetUsage,
                   onSelect: selectProvider,
-                  onOpenVendorEdit: openVendorEditFromOverview
-                }, null, 8, ["provider-rows", "active-provider-id", "failed-provider-ids"])
+                  onOpenVendorEdit: openVendorEditFromOverview,
+                  onTest: _cache[7] || (_cache[7] = payload => emit('test-provider', payload))
+                }, null, 8, ["provider-rows", "active-provider-id", "failed-provider-ids", "max-failures"])
               ]),
               _: 1
             }),
@@ -2761,13 +3059,14 @@ return (_ctx, _cache) => {
                   "active-provider-id": __props.activeProviderId,
                   "failed-provider-ids": failedProviderIds.value,
                   "drag-mode": dragMode.value,
+                  "max-failures": configValue.value.max_failures || 3,
                   "show-credentials": "",
                   onEdit: editProvider,
                   onRemove: removeProvider,
                   onSelect: selectProvider,
                   onToggle: toggleProvider,
                   onReorder: reorderProvider
-                }, null, 8, ["providers", "provider-rows", "active-provider-id", "failed-provider-ids", "drag-mode"])
+                }, null, 8, ["providers", "provider-rows", "active-provider-id", "failed-provider-ids", "drag-mode", "max-failures"])
               ]),
               _: 1
             }),
@@ -2780,9 +3079,10 @@ return (_ctx, _cache) => {
                   api: props.api,
                   "plugin-base": props.pluginBase,
                   loading: __props.loading,
-                  onRefresh: _cache[7] || (_cache[7] = $event => (emit('refresh'))),
-                  onDragModeChange: _cache[8] || (_cache[8] = $event => (vendorDragMode.value = $event))
-                }, null, 8, ["vendors", "api", "plugin-base", "loading"])
+                  visible: activeTab.value === 'vendors',
+                  onRefresh: _cache[8] || (_cache[8] = $event => (emit('refresh'))),
+                  onDragModeChange: _cache[9] || (_cache[9] = $event => (vendorDragMode.value = $event))
+                }, null, 8, ["vendors", "api", "plugin-base", "loading", "visible"])
               ]),
               _: 1
             })
@@ -2794,7 +3094,7 @@ return (_ctx, _cache) => {
     }),
     _createVNode(ProviderEditorDialog, {
       modelValue: showEditor.value,
-      "onUpdate:modelValue": _cache[10] || (_cache[10] = $event => ((showEditor).value = $event)),
+      "onUpdate:modelValue": _cache[11] || (_cache[11] = $event => ((showEditor).value = $event)),
       "retain-focus": false,
       provider: editedProvider.value,
       "editor-index": editorIndex.value,
@@ -2802,14 +3102,67 @@ return (_ctx, _cache) => {
       vendors: props.vendors,
       onAfterLeave: resetForm,
       onCommit: commitProvider,
-      onQueryModels: _cache[11] || (_cache[11] = payload => emit('query-models', payload)),
-      onTestConnection: _cache[12] || (_cache[12] = payload => emit('test-connection', payload))
-    }, null, 8, ["modelValue", "provider", "editor-index", "existing-providers", "vendors"])
+      onDelete: removeProvider,
+      onQueryModels: _cache[12] || (_cache[12] = payload => emit('query-models', payload)),
+      onTestConnection: _cache[13] || (_cache[13] = payload => emit('test-connection', payload))
+    }, null, 8, ["modelValue", "provider", "editor-index", "existing-providers", "vendors"]),
+    _createVNode(_component_VDialog, {
+      modelValue: showDeleteProviderConfirm.value,
+      "onUpdate:modelValue": _cache[15] || (_cache[15] = $event => ((showDeleteProviderConfirm).value = $event)),
+      "max-width": "420",
+      persistent: ""
+    }, {
+      default: _withCtx(() => [
+        _createVNode(_component_VCard, null, {
+          default: _withCtx(() => [
+            _createVNode(_component_VCardTitle, { class: "text-subtitle-1" }, {
+              default: _withCtx(() => [...(_cache[43] || (_cache[43] = [
+                _createTextVNode("确认删除", -1)
+              ]))]),
+              _: 1
+            }),
+            _createVNode(_component_VCardText, null, {
+              default: _withCtx(() => [
+                _cache[44] || (_cache[44] = _createTextVNode(" 确定要删除供应商「", -1)),
+                _createElementVNode("strong", null, _toDisplayString(deleteProviderName.value), 1),
+                _cache[45] || (_cache[45] = _createTextVNode("」吗？此操作不可撤销。 ", -1))
+              ]),
+              _: 1
+            }),
+            _createVNode(_component_VCardActions, { class: "d-flex justify-end ga-2" }, {
+              default: _withCtx(() => [
+                _createVNode(_component_VBtn, {
+                  variant: "text",
+                  onClick: _cache[14] || (_cache[14] = $event => (showDeleteProviderConfirm.value = false))
+                }, {
+                  default: _withCtx(() => [...(_cache[46] || (_cache[46] = [
+                    _createTextVNode("取消", -1)
+                  ]))]),
+                  _: 1
+                }),
+                _createVNode(_component_VBtn, {
+                  color: "error",
+                  onClick: confirmDeleteProvider
+                }, {
+                  default: _withCtx(() => [...(_cache[47] || (_cache[47] = [
+                    _createTextVNode("删除", -1)
+                  ]))]),
+                  _: 1
+                })
+              ]),
+              _: 1
+            })
+          ]),
+          _: 1
+        })
+      ]),
+      _: 1
+    }, 8, ["modelValue"])
   ], 2))
 }
 }
 
 };
-const AgentTokensManager = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-8e2efaad"]]);
+const AgentTokensManager = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-d51420c4"]]);
 
 export { AgentTokensManager as A };

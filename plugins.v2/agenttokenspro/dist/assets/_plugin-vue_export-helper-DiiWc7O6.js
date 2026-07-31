@@ -110,8 +110,16 @@ function buildProviderSummary(rows) {
   const limitedRemaining = totalLimit > 0 ? Math.max(totalLimit - limitedUsed, 0) : null;
   const limitedUsagePercent = totalLimit > 0 ? Math.min((limitedUsed * 100) / totalLimit, 100) : 0;
 
+  const maxFailures = 3;
+  const availableRows = enabledRows.filter(row => {
+    if (row.usage?.exhausted) return false
+    if (!row.api_key || !row.base_url || !row.model) return false
+    if ((row.usage?.failure_count || 0) >= maxFailures) return false
+    return true
+  });
+
   return {
-    available_count: enabledRows.filter(row => !row.usage?.exhausted && row.api_key && row.base_url && row.model).length,
+    available_count: availableRows.length,
     enabled_count: enabledRows.length,
     limited_provider_count: limitedRows.length,
     unlimited_provider_count: unlimitedRows.length,
