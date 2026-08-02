@@ -2125,3 +2125,5 @@ class AgentTokensPro(_PluginBase):
         """
         if event.event_data.get("plugin_id") == self.__class__.__name__:
             register_plugin_api(plugin_id=self.__class__.__name__)
+
+# release: AgentTokensPro v0.0.8
