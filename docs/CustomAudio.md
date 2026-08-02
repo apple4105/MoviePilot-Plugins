@@ -37,3 +37,4 @@
 |------|------|
 | v1.1 | 支持 STT/TTS 独立配置 API Key、Base URL、模型；启用自动切换系统音频 provider，关闭自动恢复；OpenAI Whisper/TTS 兼容格式 |
 | v1.2 | 新增前端表单强校验（ASR/TTS 启用时必填项非空检查）；新增语音回复附带文字开关，联动 `AUDIO_OUTPUT_INCLUDE_TEXT` 系统配置 |
+| v1.3 | Base64 API Key 解码提示优化（UI 一致）；Bug 修复：测试连通性失败时正确记录 failure_count |
