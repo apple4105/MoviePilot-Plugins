@@ -1,6 +1,6 @@
 # 自定义音频 Provider
 
-注册 custom 音频 provider，所有配置在插件内完成，不依赖系统音频设置。支持 OpenAI Whisper 兼容 STT 和 OpenAI TTS 兼容格式，启用后自动切换系统音频输入/输出 provider。
+基于 StepFun API 的 ASR/TTS 语音插件，注册 custom 音频 provider，所有配置在插件内完成，不依赖系统音频设置。支持 OpenAI Whisper 兼容 STT 和 OpenAI TTS 兼容格式，启用后自动切换系统音频输入/输出 provider，支持 Telegram 语音收发与动态配置。
 
 ## 功能特性
 
@@ -9,6 +9,8 @@
 - **自动切换**：启用插件后自动将系统音频输入/输出 provider 切换为 custom，关闭后自动恢复原始 provider
 - **多格式支持**：STT 支持 flac、m4a、mp3、ogg、opus、wav 等常见音频格式
 - **语言参数**：STT 支持设置识别语言（默认中文），TTS 支持设置语音角色（默认 alloy）
+- **表单强校验**：ASR/TTS 启用时必填项非空检查，防止无效配置
+- **语音回复附带文字**：可开关是否在语音回复中同时发送文字内容，联动 `AUDIO_OUTPUT_INCLUDE_TEXT` 系统配置
 
 ## 安装
 
@@ -34,3 +36,4 @@
 | 版本 | 说明 |
 |------|------|
 | v1.1 | 支持 STT/TTS 独立配置 API Key、Base URL、模型；启用自动切换系统音频 provider，关闭自动恢复；OpenAI Whisper/TTS 兼容格式 |
+| v1.2 | 新增前端表单强校验（ASR/TTS 启用时必填项非空检查）；新增语音回复附带文字开关，联动 `AUDIO_OUTPUT_INCLUDE_TEXT` 系统配置 |
