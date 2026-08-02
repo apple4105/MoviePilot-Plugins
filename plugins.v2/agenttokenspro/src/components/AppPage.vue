@@ -27,7 +27,7 @@ let refreshTimer = null
 const managerRef = ref(null)
 const vendors = ref([])
 const status = ref({
-  config: { enabled: false, show_sidebar_nav: true, max_failures: 3, providers: [] },
+  config: { enabled: false, show_sidebar_nav: true, max_failures: 3, max_retries: 2, providers: [] },
   providers: [],
   summary: {},
   active_provider_id: null,
@@ -35,7 +35,7 @@ const status = ref({
 
 // 构造 API 基础路径。
 const pluginBase = computed(() => `plugin/${props.pluginId || 'AgentTokensPro'}`)
-const config = computed(() => status.value.config || { enabled: false, show_sidebar_nav: true, max_failures: 3, providers: [] })
+const config = computed(() => status.value.config || { enabled: false, show_sidebar_nav: true, max_failures: 3, max_retries: 2, providers: [] })
 const providerRows = computed(() => status.value.providers || [])
 const summary = computed(() => status.value.summary || {})
 const activeProviderId = computed(() => status.value.active_provider_id || null)
@@ -78,6 +78,22 @@ async function loadStatus() {
   }
 }
 
+// 将服务端返回的状态数据直接应用到本地 status（不触发完整 reload）。
+// 用于测试连通性失败后立即刷新供应商故障状态。
+function applyStatusData(data) {
+  if (!data) return
+  const nextStatus = data
+  if (configDirty.value && lastServerConfig.value) {
+    status.value = {
+      ...nextStatus,
+      config: status.value.config || lastServerConfig.value,
+    }
+  } else {
+    status.value = nextStatus
+    lastServerConfig.value = JSON.parse(JSON.stringify(nextStatus.config || {}))
+  }
+}
+
 // 保存完整插件配置并刷新服务端标准化后的状态。
 async function saveConfig() {
   saving.value = true
@@ -87,6 +103,7 @@ async function saveConfig() {
       enabled: Boolean(config.value.enabled),
       show_sidebar_nav: Boolean(config.value.show_sidebar_nav),
       max_failures: Number(config.value.max_failures) || 3,
+      max_retries: Number(config.value.max_retries ?? 2),
       providers: [...(config.value.providers || [])],
       active_provider_id: status.value.active_provider_id || null,
     }
@@ -113,12 +130,19 @@ async function selectProvider(providerId) {
   const provider = providers.find(p => p.id === providerId)
   if (!provider) return
 
-  // 检查供应商是否处于故障状态（连续失败达到阈值）
+  // 检查供应商是否处于故障状态（连续失败达到阈值或硬禁用）
   const providerWithUsage = status.value.providers?.find(p => p.id === providerId)
   const failureCount = providerWithUsage?.usage?.failure_count || 0
   const maxFailures = config.value.max_failures || 3
+  const isHardDisabled = !!providerWithUsage?.usage?.hard_disabled
+  if (isHardDisabled) {
+    showFeedback('error', `供应商 [${provider.name}] 已被硬禁用（鉴权失败），无法直接启用。请先检查 API Key 并测试连通性。`)
+    return
+  }
   if (failureCount >= maxFailures) {
-    showFeedback('error', `供应商 [${provider.name}] 已连续失败 ${failureCount} 次，处于故障状态，无法直接启用。请先测试连通性确认恢复后再启用。`)
+    const isCooldown = !!providerWithUsage?.usage?.disabled_at
+    const statusLabel = isCooldown ? '冷却中' : '故障'
+    showFeedback('error', `供应商 [${provider.name}] 当前处于${statusLabel}状态（连续失败 ${failureCount} 次），无法直接启用。请先测试连通性确认恢复后再启用。`)
     return
   }
 
@@ -149,14 +173,24 @@ async function testProviderConnectivity(providerId) {
       api_key: provider.api_key,
       model: provider.model,
       provider: provider.provider,
+      provider_id: providerId,
     })
     const result = unwrapResponse(response)
     if (result && result.success) {
+      // 测试成功：重置失败计数，刷新状态
+      try {
+        await props.api.post(`${pluginBase.value}/usage/reset_failures`, { provider_id: providerId })
+      } catch (_) { /* 忽略重置失败 */ }
+      await loadStatus()
       showFeedback('success', `供应商连通测试成功`)
     } else {
+      // 测试失败：后端已标记故障，刷新状态
+      await loadStatus()
       handleTestFailure(providerId, result?.message || '测试失败')
     }
   } catch (err) {
+    // 网络异常等：刷新状态
+    await loadStatus()
     handleTestFailure(providerId, err?.message || '测试失败')
   }
 }
@@ -167,13 +201,74 @@ async function testConnection({ payload, resolve, reject }) {
     const response = await props.api.post(`${pluginBase.value}/test-connection`, payload)
     const result = unwrapResponse(response)
     if (result && result.success) {
+      // 测试成功：若有 provider_id，重置失败计数并刷新状态
+      if (payload.provider_id) {
+        try {
+          await props.api.post(`${pluginBase.value}/usage/reset_failures`, { provider_id: payload.provider_id })
+        } catch (_) { /* 忽略重置失败 */ }
+        await loadStatus()
+      }
       resolve(result)
     } else {
+      // 测试失败：后端已标记故障，刷新状态
+      await loadStatus()
       reject(new Error(result?.message || '连接失败'))
     }
   } catch (err) {
+    await loadStatus()
     reject(err)
   }
+}
+
+// 用量表格中测试供应商连通性：测试成功时重置失败计数并刷新状态。
+async function testProvider({ providerId, resolve, reject }) {
+  const provider = (config.value.providers || []).find(p => p.id === providerId)
+  if (!provider) {
+    reject(new Error('未找到该供应商'))
+    return
+  }
+  try {
+    const response = await props.api.post(`${pluginBase.value}/test-connection`, {
+      base_url: provider.base_url,
+      api_key: provider.api_key,
+      model: provider.model,
+      provider: provider.provider,
+      provider_id: providerId,
+    })
+    const result = unwrapResponse(response)
+    if (result && result.success) {
+      // 测试成功：重置失败计数，刷新状态
+      try {
+        await props.api.post(`${pluginBase.value}/usage/reset_failures`, { provider_id: providerId })
+      } catch (_) { /* 忽略重置失败 */ }
+      await loadStatus()
+      showFeedback('success', result?.message || '供应商连通测试成功')
+      resolve(result)
+    } else {
+      // 测试失败：后端已标记故障，刷新状态
+      await loadStatus()
+      flashProviderFailure(providerId)
+      showFeedback('error', result?.message || '测试失败')
+      reject(new Error(result?.message || '测试失败'))
+    }
+  } catch (err) {
+    await loadStatus()
+    flashProviderFailure(providerId)
+    showFeedback('error', err?.message || '测试失败')
+    reject(err)
+  }
+}
+
+// 红闪指定供应商行（不触发顶部提示，由调用方自行处理消息）
+function flashProviderFailure(providerId) {
+  if (!managerRef.value) return
+  const manager = managerRef.value
+  manager.failedProviderIds = [...manager.failedProviderIds, providerId]
+  setTimeout(() => {
+    if (managerRef.value) {
+      managerRef.value.failedProviderIds = managerRef.value.failedProviderIds.filter(id => id !== providerId)
+    }
+  }, 1500)
 }
 
 // 处理测试失败：红闪1.5秒 + 显示错误提示（不自动切换，由用户手动选择）
@@ -193,7 +288,20 @@ function showFeedback(type, message) {
   managerRef.value.testFeedback = { type, message, show: true }
   setTimeout(() => {
     if (managerRef.value) managerRef.value.testFeedback.show = false
-  }, 3000)
+  }, 5000)
+}
+
+// 重置指定供应商的失败计数和冷却状态（解冻），保留用量统计。
+async function resetFailures(providerId) {
+  if (!providerId) return
+  loading.value = true
+  try {
+    const response = await props.api.post(`${pluginBase.value}/usage/reset_failures`, { provider_id: providerId })
+    status.value = unwrapResponse(response) || status.value
+    showFeedback('success', '已重置失败计数')
+  } finally {
+    loading.value = false
+  }
 }
 
 // 重置指定供应商的运行记录并自动保存。
@@ -279,9 +387,11 @@ onUnmounted(() => {
       @auto-save="autoSave"
       @reset-usage="resetUsage"
       @reset-all-usage="resetAllUsage"
+      @reset-failures="resetFailures"
       @query-models="queryModels"
       @test-connection="testConnection"
       @select-provider="selectProvider"
+      @test-provider="testProvider"
     />
   </div>
 </template>

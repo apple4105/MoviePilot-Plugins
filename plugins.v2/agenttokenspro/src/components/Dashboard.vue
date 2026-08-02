@@ -96,7 +96,22 @@ const visibleProviderLimit = computed(() => {
   }
   return 3
 })
-const visibleProviders = computed(() => providers.value.slice(0, visibleProviderLimit.value))
+// 排序：正常(紫色) > 缺配置(黄色) > 故障/耗尽(红色)，同组保持原始顺序
+const sortedProviders = computed(() => {
+  const list = [...providers.value]
+  return list.sort((a, b) => {
+    const aCooldown = isProviderCooldown(a)
+    const bCooldown = isProviderCooldown(b)
+    const aFaulty = isProviderFaulty(a)
+    const bFaulty = isProviderFaulty(b)
+    const aMisconf = isProviderMisconfigured(a)
+    const bMisconf = isProviderMisconfigured(b)
+    const aRank = aCooldown ? 3 : (aFaulty ? 2 : (aMisconf ? 1 : 0))
+    const bRank = bCooldown ? 3 : (bFaulty ? 2 : (bMisconf ? 1 : 0))
+    return aRank - bRank
+  })
+})
+const visibleProviders = computed(() => sortedProviders.value.slice(0, visibleProviderLimit.value))
 // 兼容宿主传入的数字或字符串刷新间隔。
 const refreshSeconds = computed(() => {
   const seconds = Number(props.refreshInterval || attrs.value.refresh || 0)
@@ -118,9 +133,37 @@ const lastRefreshedTime = computed(() => {
   })
 })
 
-// 判断供应商是否处于故障状态（连续失败次数 > 0）
+// 判断供应商是否处于故障状态（连续失败达到阈值或额度耗尽或已禁用或硬禁用）
+// 冷却中（disabled_at 存在）不算硬故障，名称不标红
 function isProviderFaulty(row) {
-  return (row?.usage?.failure_count || 0) > 0
+  const maxFailures = status.value?.config?.max_failures || 3
+  const failureCount = row?.usage?.failure_count || 0
+  if (row?.usage?.hard_disabled) return true
+  if (row?.usage?.exhausted) return true
+  if (!row?.enabled) return true
+  if (failureCount >= maxFailures) return !row?.usage?.disabled_at
+  return false
+}
+
+// 判断供应商是否处于冷却中（失败达阈值且 disabled_at 存在，且非硬禁用）
+function isProviderCooldown(row) {
+  const maxFailures = status.value?.config?.max_failures || 3
+  const failureCount = row?.usage?.failure_count || 0
+  if (!row?.enabled) return false
+  if (row?.usage?.hard_disabled) return false
+  if (row?.usage?.exhausted) return false
+  if (failureCount >= maxFailures) return !!row?.usage?.disabled_at
+  return false
+}
+
+// 判断供应商是否被硬禁用（401/402/403/404/429 致命错误）
+function isProviderHardDisabled(row) {
+  return !!row?.usage?.hard_disabled
+}
+
+// 判断供应商是否缺少必要配置（无 api_key / base_url / model）
+function isProviderMisconfigured(row) {
+  return !row?.api_key || !row?.base_url || !row?.model
 }
 
 // 读取 Agent Tokens 仪表板状态。
@@ -268,13 +311,25 @@ onUnmounted(() => {
               <div class="agenttokens-dashboard-provider__main">
                 <div
                   class="agenttokens-dashboard-provider__name"
-                  :class="{ 'agenttokens-dashboard-provider__name--faulty': isProviderFaulty(row) }"
+                  :class="{
+                    'agenttokens-dashboard-provider__name--faulty': isProviderFaulty(row),
+                    'agenttokens-dashboard-provider__name--cooldown': isProviderCooldown(row),
+                    'agenttokens-dashboard-provider__name--misconfigured': !isProviderFaulty(row) && !isProviderCooldown(row) && isProviderMisconfigured(row),
+                  }"
                 >{{ row.name || '未命名供应商' }}</div>
                 <div class="agenttokens-dashboard-provider__model">{{ row.model || '未配置模型' }}</div>
               </div>
               <div class="agenttokens-dashboard-provider__tokens">
                 {{ formatTokens(row.usage?.total_tokens) }}
               </div>
+              <VChip
+                size="x-small"
+                :color="isProviderFaulty(row) ? 'error' : (isProviderCooldown(row) ? 'info' : (isProviderMisconfigured(row) ? 'warning' : 'success'))"
+                variant="tonal"
+                class="agenttokens-dashboard-provider__status"
+              >
+                {{ isProviderFaulty(row) ? (row.usage?.exhausted ? '耗尽' : '故障') : (isProviderCooldown(row) ? '冷却中' : (isProviderMisconfigured(row) ? '缺配置' : '可用')) }}
+              </VChip>
             </div>
           </div>
 
@@ -476,9 +531,18 @@ onUnmounted(() => {
 }
 
 .agenttokens-dashboard-provider__name {
+  color: inherit;
   font-size: 0.85rem;
   font-weight: 600;
   line-height: 1.2;
+}
+
+.agenttokens-dashboard-provider__name--misconfigured {
+  color: #eab308 !important;
+}
+
+.agenttokens-dashboard-provider__name--cooldown {
+  color: #3b82f6 !important;
 }
 
 .agenttokens-dashboard-provider__name--faulty {
@@ -495,6 +559,10 @@ onUnmounted(() => {
   color: var(--agenttokens-muted-color);
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
+}
+
+.agenttokens-dashboard-provider__status {
+  flex-shrink: 0;
 }
 
 .agenttokens-dashboard-empty {

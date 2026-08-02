@@ -23,7 +23,7 @@ function createProvider() {
 
 // 生成深拷贝配置，避免直接修改父组件传入对象。
 function cloneConfig(config) {
-  return JSON.parse(JSON.stringify(config || { enabled: false, show_sidebar_nav: true, max_failures: 3, providers: [] }))
+  return JSON.parse(JSON.stringify(config || { enabled: false, show_sidebar_nav: true, max_failures: 3, max_retries: 2, providers: [] }))
 }
 
 // 格式化 token 数字，保持表格和统计展示可读。

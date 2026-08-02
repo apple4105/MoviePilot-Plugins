@@ -23,7 +23,7 @@ export function createProvider() {
 
 // 生成深拷贝配置，避免直接修改父组件传入对象。
 export function cloneConfig(config) {
-  return JSON.parse(JSON.stringify(config || { enabled: false, show_sidebar_nav: true, max_failures: 3, providers: [] }))
+  return JSON.parse(JSON.stringify(config || { enabled: false, show_sidebar_nav: true, max_failures: 3, max_retries: 2, providers: [] }))
 }
 
 // 格式化 token 数字，保持表格和统计展示可读。
@@ -110,8 +110,16 @@ export function buildProviderSummary(rows) {
   const limitedRemaining = totalLimit > 0 ? Math.max(totalLimit - limitedUsed, 0) : null
   const limitedUsagePercent = totalLimit > 0 ? Math.min((limitedUsed * 100) / totalLimit, 100) : 0
 
+  const maxFailures = 3
+  const availableRows = enabledRows.filter(row => {
+    if (row.usage?.exhausted) return false
+    if (!row.api_key || !row.base_url || !row.model) return false
+    if ((row.usage?.failure_count || 0) >= maxFailures) return false
+    return true
+  })
+
   return {
-    available_count: enabledRows.filter(row => !row.usage?.exhausted && row.api_key && row.base_url && row.model).length,
+    available_count: availableRows.length,
     enabled_count: enabledRows.length,
     limited_provider_count: limitedRows.length,
     unlimited_provider_count: unlimitedRows.length,

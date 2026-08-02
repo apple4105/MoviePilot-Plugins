@@ -1,7 +1,8 @@
+import asyncio
 import re
 import threading
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import Body
@@ -15,6 +16,11 @@ from app.plugins import _PluginBase
 from app.schemas.types import ChainEventType, EventType
 
 
+class NoAvailableProviderError(Exception):
+    """所有供应商均不可用，无法完成自动切换。"""
+    pass
+
+
 class AgentTokensPro(_PluginBase):
     """
     Agent Tokens Pro 管理插件。
@@ -26,7 +32,7 @@ class AgentTokensPro(_PluginBase):
     plugin_name = "Agent Tokens Pro"
     plugin_desc = "管理多平台免费 Token 配额，按优先级自动切换 Agent LLM 供应商。"
     plugin_icon = "agentresourceofficer.png"
-    plugin_version = "0.0.5"
+    plugin_version = "0.0.6"
     plugin_author = "apple4105"
     author_url = "https://github.com/apple4105"
     plugin_config_prefix = "agenttokenspro_"
@@ -38,6 +44,30 @@ class AgentTokensPro(_PluginBase):
 
     # 失败自动切换：连续失败次数达到阈值后跳过该供应商。
     DEFAULT_MAX_FAILURES = 3
+    # 预检探针超时时间（秒）
+    PREFLIGHT_TIMEOUT = 5
+    # 预检成功缓存有效期（秒），期内跳过重复探针以减少延迟
+    PREFLIGHT_CACHE_TTL = 60
+    # 供应商故障冷却时间（秒），超过后自动恢复参与选择
+    COOLDOWN_SECONDS = 900  # 15 分钟
+    # 硬故障 HTTP 状态码：探针或实际请求返回这些码时立即剔除供应商
+    HARD_FAILURE_CODES = {401, 402, 403, 404, 429}
+    # 错误分类常量
+    ERROR_TYPE_FATAL = "fatal"           # 致命错误：立即切换供应商
+    ERROR_TYPE_TRANSIENT = "transient"   # 瞬时错误：退避后重试，达阈值再切换
+    ERROR_TYPE_UNKNOWN = "unknown"       # 未知错误：按瞬时处理
+    # 瞬时错误重试退避参数（秒）
+    TRANSIENT_BACKOFF_BASE = 1.0          # 基础退避
+    TRANSIENT_BACKOFF_MAX = 5.0           # 最大退避
+    # Agent 执行失败后自动重试次数（切换到其他供应商）
+    MAX_RETRIES_DEFAULT = 2
+    # Agent 执行失败错误前缀（与 app/agent/__init__.py 保持一致）
+    _AGENT_ERROR_PREFIX = "智能助手执行失败"
+
+    # 类级引用：供 monkey-patch wrapper 访问当前插件实例
+    _retry_plugin_instance: Optional["AgentTokensPro"] = None
+    # 标记 monkey-patch 是否已应用，防止重复 patch
+    _retry_patch_applied: bool = False
 
     @property
     def name(self) -> str:
@@ -53,18 +83,28 @@ class AgentTokensPro(_PluginBase):
         self._enabled = bool(config.get("enabled"))
         self._show_sidebar_nav = bool(config.get("show_sidebar_nav", True))
         self._max_failures = max(self._to_int(config.get("max_failures"), self.DEFAULT_MAX_FAILURES), 1)
+        self._max_retries = max(self._to_int(config.get("max_retries"), self.MAX_RETRIES_DEFAULT), 0)
         self._active_provider_id = self._clean_text(config.get("active_provider_id")) or None
         self._manual_override = bool(config.get("manual_override", False))
         self._providers = self._normalize_providers(config.get("providers") or [])
         # 供应商切换通知防轰炸：记录上次通知时间和供应商 ID，仅在真正切换且冷却期内无重复通知
         self._last_switch_notify_time: float = 0.0
         self._last_notified_provider_id: Optional[str] = None
+        # 预检探针成功缓存：provider_id -> monotonic timestamp，TTL 内跳过重复探针
+        self._preflight_cache: Dict[str, float] = {}
+        # 预检缓存读写锁，防止 _preflight_check 与 _mark_provider_faulty 并发竞争
+        self._preflight_cache_lock = threading.Lock()
         # 仅当供应商列表非空时才回写（补齐的 UUID 需要持久化）；
         # 空列表时不写回，避免数据库被意外清空后启动时再次覆盖。
         if self._providers:
             self._save_config()
         else:
             logger.warning("Agent Tokens 插件启动时未加载到任何供应商配置，跳过配置回写以保护数据安全。")
+
+        # 注册当前插件实例供 retry wrapper 使用
+        AgentTokensPro._retry_plugin_instance = self
+        # 应用 Agent 执行失败自动重试 monkey-patch
+        self._apply_retry_patch()
 
     def get_state(self) -> bool:
         """
@@ -228,6 +268,139 @@ class AgentTokensPro(_PluginBase):
         """
         pass
 
+    @classmethod
+    def _apply_retry_patch(cls):
+        """
+        对 MoviePilotAgent._execute_agent 应用 monkey-patch，
+        在 Agent 执行失败时自动切换供应商并重试。
+
+        重试条件：
+        - 插件已启用且 max_retries > 0
+        - 错误类型为"智能助手执行失败"（可重试错误）
+        - 无已发送的流式输出（_streamed_output 为空）
+        - 仍有可用供应商可切换
+
+        重试机制：
+        - 每次失败后 _send_agent_tokens_usage_event 标记供应商故障
+        - _compiled_agent_bundle = None 强制重建 Agent
+        - 重建时 select_llm_provider 事件选择新供应商
+        - 非最后一次尝试时抑制 _dispatch_execution_notice（避免多次错误通知）
+        """
+        try:
+            from app.agent import MoviePilotAgent
+        except ImportError:
+            logger.warning("AgentTokensPro: 无法导入 MoviePilotAgent，跳过重试 patch")
+            return
+
+        current_method = getattr(MoviePilotAgent, "_execute_agent", None)
+        if current_method is None:
+            logger.warning("AgentTokensPro: MoviePilotAgent._execute_agent 不存在，跳过重试 patch")
+            return
+
+        # 如果已被 patch，先恢复原始方法
+        if getattr(current_method, "_is_atp_retry_wrapper", False):
+            if hasattr(cls, "_original_execute_agent"):
+                MoviePilotAgent._execute_agent = cls._original_execute_agent
+                current_method = cls._original_execute_agent
+            else:
+                logger.warning("AgentTokensPro: 无法恢复原始 _execute_agent，跳过重试 patch")
+                return
+
+        # 保存原始方法
+        cls._original_execute_agent = current_method
+        original_method = current_method
+
+        async def _execute_agent_with_retry(self, messages):
+            """
+            _execute_agent 的重试包装器。
+            在 Agent 执行失败时自动切换供应商并重试。
+            """
+            plugin = cls._retry_plugin_instance
+            max_retries = plugin._max_retries if plugin and plugin.get_state() else 0
+
+            # 未启用重试时直接调用原始方法
+            if max_retries <= 0:
+                return await original_method(self, messages)
+
+            original_dispatch = self._dispatch_execution_notice
+            total_attempts = max_retries + 1  # 1 次原始 + max_retries 次重试
+            last_result = None
+            visited_ids: set = set()  # 已尝试且失败的供应商 ID 集合，防止同一重试链路中重复尝试
+
+            for attempt in range(total_attempts):
+                is_last_attempt = attempt == total_attempts - 1
+                suppressed = []  # 记录被抑制的错误通知消息
+
+                if not is_last_attempt:
+                    async def _suppress_dispatch(msg=None, *args, **kwargs):
+                        suppressed.append(msg)
+                    self._dispatch_execution_notice = _suppress_dispatch
+                else:
+                    self._dispatch_execution_notice = original_dispatch
+
+                try:
+                    result = await original_method(self, messages)
+                    last_result = result
+                    reply_text = result[0] if result else ""
+
+                    # 任务被取消：不重试，不切换供应商，直接返回
+                    if reply_text == "任务已取消":
+                        return result
+
+                    # 成功或不可重试的错误（非"执行失败"前缀）
+                    if not reply_text or not reply_text.startswith(cls._AGENT_ERROR_PREFIX):
+                        # 如果通知被抑制（如不支持图片输入），补发通知
+                        if suppressed:
+                            await original_dispatch(suppressed[0])
+                        return result
+
+                    # 可重试错误（"智能助手执行失败"前缀）
+                    if is_last_attempt:
+                        # 最后一次尝试：通知已由原始方法发送
+                        break
+
+                    # 检查是否可以重试
+                    can_retry = True
+                    if getattr(self, "_streamed_output", ""):
+                        logger.info("AgentTokensPro: 执行失败但已有流式输出，无法重试")
+                        can_retry = False
+                    elif plugin:
+                        # 检查是否有其他可用供应商（排除所有已失败的供应商，防止重复尝试）
+                        current_id = getattr(plugin, "_active_provider_id", None)
+                        if current_id:
+                            visited_ids.add(current_id)
+                        available = plugin._select_provider(
+                            skip_preflight=True,
+                            exclude_provider_ids=visited_ids if visited_ids else None,
+                        )
+                        if not available:
+                            logger.info(
+                                f"AgentTokensPro: 执行失败且所有供应商均已尝试（visited={visited_ids}），停止重试"
+                            )
+                            can_retry = False
+
+                    if not can_retry:
+                        # 补发被抑制的错误通知
+                        if suppressed:
+                            await original_dispatch(suppressed[0])
+                        break
+
+                    logger.info(
+                        f"AgentTokensPro: Agent 执行失败，"
+                        f"准备第 {attempt + 2}/{total_attempts} 次尝试（切换供应商）"
+                    )
+                except asyncio.CancelledError:
+                    # 任务被取消：不重试，不切换供应商，直接传播取消异常
+                    raise
+                finally:
+                    self._dispatch_execution_notice = original_dispatch
+
+            return last_result if last_result else (cls._AGENT_ERROR_PREFIX, {})
+
+        _execute_agent_with_retry._is_atp_retry_wrapper = True
+        MoviePilotAgent._execute_agent = _execute_agent_with_retry
+        logger.info("AgentTokensPro: 已应用 Agent 执行失败自动重试 patch")
+
     @staticmethod
     def _to_int(value: Any, default: int = 0) -> int:
         """
@@ -361,6 +534,7 @@ class AgentTokensPro(_PluginBase):
             "enabled": bool(getattr(self, "_enabled", False)),
             "show_sidebar_nav": bool(getattr(self, "_show_sidebar_nav", True)),
             "max_failures": getattr(self, "_max_failures", self.DEFAULT_MAX_FAILURES),
+            "max_retries": getattr(self, "_max_retries", self.MAX_RETRIES_DEFAULT),
             "providers": list(getattr(self, "_providers", [])),
             "active_provider_id": getattr(self, "_active_provider_id", None) or None,
             "manual_override": bool(getattr(self, "_manual_override", False)),
@@ -429,6 +603,9 @@ class AgentTokensPro(_PluginBase):
             "failure_count": self._to_int(provider_usage.get("failure_count"), 0),
             "last_used_at": provider_usage.get("last_used_at"),
             "last_error": provider_usage.get("last_error"),
+            "disabled_at": provider_usage.get("disabled_at"),
+            "cooldown_until": provider_usage.get("cooldown_until"),
+            "hard_disabled": provider_usage.get("hard_disabled", False),
             "exhausted": token_limit > 0 and total_used >= token_limit,
         }
 
@@ -492,14 +669,191 @@ class AgentTokensPro(_PluginBase):
             "limited_usage_percent": limited_usage_percent,
         }
 
-    def _select_provider(self) -> Optional[dict]:
+    def _preflight_check(self, provider: dict) -> bool:
+        """
+        轻量级预检探针：GET /models，3 秒超时。
+
+        返回 True 表示供应商健康可用，False 表示不可用。
+        失败时自动标记故障（硬故障立即剔除，软错误递增计数）。
+
+        优化：TTL 内曾探针成功的供应商跳过重复探针，减少延迟。
+        """
+        import time as _time
+
+        provider_id = provider.get("id")
+        if not provider_id:
+            return False
+
+        # TTL 缓存：近期探针成功的供应商直接放行
+        now = _time.monotonic()
+        with self._preflight_cache_lock:
+            last_ok = self._preflight_cache.get(provider_id, 0.0)
+        if last_ok and (now - last_ok) < self.PREFLIGHT_CACHE_TTL:
+            return True
+
+        base_url = (provider.get("base_url") or "").rstrip("/")
+        api_key = provider.get("api_key", "")
+        if not base_url or not api_key:
+            return False
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        if provider.get("user_agent"):
+            headers["User-Agent"] = provider["user_agent"]
+
+        try:
+            preflight_url = f"{base_url}/models"
+            resp = requests.get(preflight_url, headers=headers, timeout=self.PREFLIGHT_TIMEOUT)
+        except requests.exceptions.Timeout:
+            self._mark_provider_faulty(provider_id, "预检探针超时: 3秒内无响应", hard_failure=False)
+            return False
+        except requests.exceptions.ConnectionError as err:
+            self._mark_provider_faulty(provider_id, f"预检探针连接失败: {err}", hard_failure=False)
+            return False
+        except Exception as err:
+            self._mark_provider_faulty(provider_id, f"预检探针异常: {err}", hard_failure=False)
+            return False
+
+        if resp.status_code == 200:
+            # 探针成功，更新缓存
+            with self._preflight_cache_lock:
+                self._preflight_cache[provider_id] = now
+            return True
+
+        # 非 200 响应：使用 _classify_error 统一分类
+        if resp.status_code >= 400:
+            brief = self._status_brief(resp.status_code)
+            detail = self._extract_error_detail(resp)
+            msg = f"预检探针失败: {brief}"
+            if detail:
+                msg += f"（{detail}）"
+            error_type = self._classify_error(msg)
+            hard = (error_type == self.ERROR_TYPE_FATAL)
+            self._mark_provider_faulty(provider_id, msg, hard_failure=hard)
+            return False
+
+        # 3xx 等异常状态码：保守视为不可用
+        self._mark_provider_faulty(provider_id, f"预检探针异常状态码: {resp.status_code}", hard_failure=False)
+        return False
+
+    def _check_cooldown_recovery(self, provider_id: str, usage: Dict[str, dict]) -> bool:
+        """
+        检查被禁用的供应商是否已过冷却期。
+
+        如果距离 disabled_at 超过 COOLDOWN_SECONDS，自动重置 failure_count 并返回 True。
+        否则返回 False（仍在冷却中）。
+
+        特殊处理：如果 disabled_at 缺失但 failure_count 已达阈值（历史数据或数据迁移场景），
+        视为冷却期已过，立即恢复，避免供应商永久冻结。
+        """
+        record = usage.get(provider_id, {})
+        # 硬禁用供应商不自动恢复，需手动解封或测试连通性成功
+        if record.get("hard_disabled"):
+            logger.debug(f"Agent Tokens 供应商 [{provider_id}] 硬禁用中，不自动恢复")
+            return False
+        disabled_at = record.get("disabled_at")
+        if not disabled_at:
+            # disabled_at 缺失但 failure_count 已达阈值 → 历史数据，立即恢复
+            logger.info(
+                f"Agent Tokens 供应商 [{provider_id}] failure_count 达阈值但无 disabled_at 记录，"
+                f"视为冷却期已过，立即恢复"
+            )
+            with self._usage_lock:
+                usage_latest = self._load_usage()
+                rec = usage_latest.get(provider_id, {})
+                rec["failure_count"] = 0
+                rec["last_error"] = None
+                rec.pop("disabled_at", None)
+                rec.pop("cooldown_until", None)
+                usage_latest[provider_id] = rec
+                self._save_usage(usage_latest)
+                usage[provider_id] = rec
+            with self._preflight_cache_lock:
+                self._preflight_cache.pop(provider_id, None)
+            return True
+
+        try:
+            disabled_time = datetime.strptime(disabled_at, "%Y-%m-%d %H:%M:%S")
+        except (ValueError, TypeError):
+            # 解析失败也视为可恢复，避免格式异常导致永久冻结
+            logger.warning(
+                f"Agent Tokens 供应商 [{provider_id}] disabled_at 格式异常: {disabled_at}，立即恢复"
+            )
+            with self._usage_lock:
+                usage_latest = self._load_usage()
+                rec = usage_latest.get(provider_id, {})
+                rec["failure_count"] = 0
+                rec["last_error"] = None
+                rec.pop("disabled_at", None)
+                rec.pop("cooldown_until", None)
+                usage_latest[provider_id] = rec
+                self._save_usage(usage_latest)
+                usage[provider_id] = rec
+            with self._preflight_cache_lock:
+                self._preflight_cache.pop(provider_id, None)
+            return True
+
+        elapsed = (datetime.now() - disabled_time).total_seconds()
+        if elapsed >= self.COOLDOWN_SECONDS:
+            with self._usage_lock:
+                # 重新加载以防其他线程已修改
+                usage_latest = self._load_usage()
+                rec = usage_latest.get(provider_id, {})
+                rec["failure_count"] = 0
+                rec["last_error"] = None
+                rec.pop("disabled_at", None)
+                rec.pop("cooldown_until", None)
+                usage_latest[provider_id] = rec
+                self._save_usage(usage_latest)
+                # 同步更新传入的 usage dict
+                usage[provider_id] = rec
+            # 清除预检缓存，强制下次重新探针
+            with self._preflight_cache_lock:
+                self._preflight_cache.pop(provider_id, None)
+            logger.info(
+                f"Agent Tokens 供应商 [{provider_id}] 冷却期已过（{elapsed:.0f}秒），"
+                f"自动恢复，重置失败计数"
+            )
+            return True
+        return False
+
+    def _select_provider(
+        self,
+        skip_preflight: bool = False,
+        exclude_provider_id: Optional[str] = None,
+        exclude_provider_ids: Optional[set] = None,
+    ) -> Optional[dict]:
         """
         按优先级选择第一个启用且未耗尽 token 配额的供应商。
-        连续失败次数达到 max_failures 阈值的供应商会被跳过。
+
+        选择流程：
+        1. 跳过未启用/未配置/已耗尽的供应商
+        2. 严格排除 exclude_provider_id 指定的故障节点（防止切换回自身）
+        3. 对达到失败阈值的供应商检查冷却恢复，未恢复则跳过
+        4. 对候选供应商执行预检探针（skip_preflight=True 时跳过），
+           探针失败则标记故障并继续下一个
+        5. 返回第一个通过预检的供应商
         """
         usage = self._load_usage()
         max_failures = getattr(self, "_max_failures", self.DEFAULT_MAX_FAILURES)
         for provider in getattr(self, "_providers", []):
+            # 严格排除故障节点，防止 failover 时切换回自身
+            pid = provider.get("id")
+            if exclude_provider_id and pid == exclude_provider_id:
+                logger.debug(
+                    f"Agent Tokens 排除供应商 [{provider.get('name')}]："
+                    f"本次为故障切换，不重新选择该节点"
+                )
+                continue
+            if exclude_provider_ids and pid in exclude_provider_ids:
+                logger.debug(
+                    f"Agent Tokens 排除供应商 [{provider.get('name')}]："
+                    f"已在本次重试链路中失败，不再重复尝试"
+                )
+                continue
             if not provider.get("enabled"):
                 continue
             if not provider.get("api_key") or not provider.get("model") or not provider.get("base_url"):
@@ -507,15 +861,38 @@ class AgentTokensPro(_PluginBase):
             provider_usage = self._provider_usage(provider, usage)
             if provider_usage["exhausted"]:
                 continue
-            # 连续失败次数达到阈值时跳过该供应商
-            failure_count = provider_usage.get("failure_count", 0)
-            if failure_count >= max_failures:
+            # 硬禁用供应商（401/402/403/404/429 致命错误）不自动恢复，直接跳过
+            if provider_usage.get("hard_disabled"):
                 logger.debug(
-                    f"Agent Tokens 跳过供应商 [{provider.get('name')}]："
-                    f"连续失败 {failure_count} 次，阈值 {max_failures}"
+                    f"Agent Tokens 跳过供应商 [{provider.get('name')}]：硬禁用中"
                 )
                 continue
+            # 连续失败次数达到阈值时检查冷却恢复
+            failure_count = provider_usage.get("failure_count", 0)
+            if failure_count >= max_failures:
+                if self._check_cooldown_recovery(provider.get("id"), usage):
+                    logger.info(f"Agent Tokens 供应商 [{provider.get('name')}] 冷却恢复，开始预检")
+                else:
+                    logger.debug(
+                        f"Agent Tokens 跳过供应商 [{provider.get('name')}]："
+                        f"连续失败 {failure_count} 次，阈值 {max_failures}，冷却中"
+                    )
+                    continue
+            # 预检探针（skip_preflight=True 时跳过，用于状态查询等非分配场景）
+            if not skip_preflight:
+                if not self._preflight_check(provider):
+                    logger.debug(f"Agent Tokens 供应商 [{provider.get('name')}] 预检失败，尝试下一个")
+                    continue
             return provider
+
+        # 候选池为空时的诊断日志
+        total = len(getattr(self, "_providers", []))
+        excluded_count = (1 if exclude_provider_id else 0) + (len(exclude_provider_ids) if exclude_provider_ids else 0)
+        logger.debug(
+            f"Agent Tokens _select_provider 返回 None："
+            f"共 {total} 个供应商，排除 {excluded_count} 个节点，"
+            f"无可用候选"
+        )
         return None
 
     def _latest_used_provider_id(self, usage: Optional[Dict[str, dict]] = None) -> Optional[str]:
@@ -549,7 +926,7 @@ class AgentTokensPro(_PluginBase):
         if latest_provider_id in provider_ids:
             return latest_provider_id
 
-        selected_provider = self._select_provider()
+        selected_provider = self._select_provider(skip_preflight=True)
         if selected_provider:
             return selected_provider.get("id")
         return None
@@ -610,6 +987,7 @@ class AgentTokensPro(_PluginBase):
             self._enabled = bool(config.get("enabled"))
             self._show_sidebar_nav = bool(config.get("show_sidebar_nav", True))
             self._max_failures = max(self._to_int(config.get("max_failures"), self.DEFAULT_MAX_FAILURES), 1)
+            self._max_retries = max(self._to_int(config.get("max_retries"), self.MAX_RETRIES_DEFAULT), 0)
 
             # 获取现有供应商映射（用于编辑模式判断）
             existing_providers = list(getattr(self, "_providers", []))
@@ -778,6 +1156,9 @@ class AgentTokensPro(_PluginBase):
             if record:
                 record["failure_count"] = 0
                 record["last_error"] = None
+                record.pop("disabled_at", None)
+                record.pop("cooldown_until", None)
+                record.pop("hard_disabled", None)
                 self._save_usage(usage)
         return schemas.Response(success=True, data=self.get_status().data)
 
@@ -975,28 +1356,131 @@ class AgentTokensPro(_PluginBase):
         }
         return status_map.get(status_code, f"HTTP {status_code}")
 
+    @classmethod
+    def _classify_error(cls, error_text: str) -> str:
+        """
+        错误分类器：将错误文本分类为致命错误或瞬时错误。
+
+        致命错误 (fatal)：HTTP 401/402/403/404/429 — 鉴权失败、欠费、
+        无权限、接口不存在、频率限制。供应商本身有问题，重试无意义，
+        应立即切换到其他供应商。
+
+        瞬时错误 (transient)：HTTP 5xx、超时、网络异常。可能是临时
+        故障，退避后重试可能恢复。
+
+        返回 ERROR_TYPE_FATAL / ERROR_TYPE_TRANSIENT / ERROR_TYPE_UNKNOWN
+        """
+        if not error_text:
+            return cls.ERROR_TYPE_UNKNOWN
+        error_lower = error_text.lower()
+
+        # 识别用户主动取消/中断任务
+        cancel_keywords = [
+            "cancel", "cancelled", "canceled", "abort", "aborted",
+            "取消", "用户取消", "手动停止", "task cancelled", "stopped",
+            "已取消",
+        ]
+        for kw in cancel_keywords:
+            if kw in error_lower:
+                return "cancelled"
+
+        # 致命错误：硬故障状态码（使用 word-boundary 精确匹配，避免端口号/时间戳误判）
+        for code in cls.HARD_FAILURE_CODES:
+            if re.search(rf'\b{code}\b', error_lower):
+                return cls.ERROR_TYPE_FATAL
+        # 瞬时错误：5xx / 超时 / 网络异常（5xx 同样使用 word-boundary 精确匹配）
+        if re.search(r'\b50[0-4]\b', error_lower):
+            return cls.ERROR_TYPE_TRANSIENT
+        transient_indicators = [
+            "timeout", "timed out",
+            "connection", "network", "unreachable", "refused",
+            "reset", "broken pipe", "temporarily",
+            "internal server error", "bad gateway", "service unavailable",
+        ]
+        for indicator in transient_indicators:
+            if indicator in error_lower:
+                return cls.ERROR_TYPE_TRANSIENT
+        return cls.ERROR_TYPE_UNKNOWN
+
+    def _compute_cooldown_until(self, disabled_at_str: str) -> Optional[str]:
+        """根据 disabled_at 计算冷却结束时间字符串。"""
+        try:
+            disabled_time = datetime.strptime(disabled_at_str, "%Y-%m-%d %H:%M:%S")
+            cooldown_until_dt = disabled_time + timedelta(seconds=self.COOLDOWN_SECONDS)
+            return cooldown_until_dt.strftime("%Y-%m-%d %H:%M:%S")
+        except (ValueError, TypeError):
+            return None
+
+    def _provider_status(self, provider: dict, provider_usage: dict) -> str:
+        """
+        计算供应商当前状态字符串。
+
+        返回值：active / cooldown / exhausted / misconfigured / disabled
+        """
+        if not provider.get("enabled"):
+            return "disabled"
+        if not provider.get("api_key") or not provider.get("model") or not provider.get("base_url"):
+            return "misconfigured"
+        if provider_usage.get("exhausted"):
+            return "exhausted"
+        if provider_usage.get("hard_disabled"):
+            return "hard_disabled"
+        max_failures = getattr(self, "_max_failures", self.DEFAULT_MAX_FAILURES)
+        failure_count = self._to_int(provider_usage.get("failure_count"), 0)
+        if failure_count >= max_failures:
+            disabled_at = provider_usage.get("disabled_at")
+            if disabled_at:
+                try:
+                    disabled_time = datetime.strptime(disabled_at, "%Y-%m-%d %H:%M:%S")
+                    if (datetime.now() - disabled_time).total_seconds() < self.COOLDOWN_SECONDS:
+                        return "cooldown"
+                except (ValueError, TypeError):
+                    pass  # 格式异常，视为可恢复
+            # failure_count 达阈值但冷却已过或无 disabled_at → active（_check_cooldown_recovery 会重置）
+            return "active"
+        return "active"
+
     def _mark_provider_faulty(self, provider_id: str, error_message: str, hard_failure: bool = False) -> None:
         """
         将指定供应商标记为故障。
 
         - hard_failure=False（默认）：递增 failure_count，记录 last_error。
+          达到阈值时设置 disabled_at 进入冷却。
         - hard_failure=True：直接将 failure_count 设为 max_failures 阈值，
-          使该供应商立即被跳过。用于测试连通性返回 HTTP >= 400 等硬故障场景。
+          使该供应商立即被跳过。同时设置 disabled_at 进入冷却。
+          用于测试连通性返回 HTTP >= 400 等硬故障场景。
         """
         if not provider_id:
             return
+        # 清除预检缓存，确保下次不会跳过探针
+        with self._preflight_cache_lock:
+            self._preflight_cache.pop(provider_id, None)
         with self._usage_lock:
             usage = self._load_usage()
             record = usage.get(provider_id, {})
             max_failures = getattr(self, "_max_failures", self.DEFAULT_MAX_FAILURES)
             if hard_failure:
                 record["failure_count"] = max_failures
+                record["hard_disabled"] = True
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                record["disabled_at"] = now_str
+                # 硬故障不设 cooldown_until，不自动恢复，需手动解封或测试连通性成功
+                record.pop("cooldown_until", None)
                 logger.warning(
                     f"Agent Tokens 供应商 [{provider_id}] 硬故障，"
-                    f"failure_count 直接设为 {max_failures}：{error_message[:200] if error_message else ''}"
+                    f"failure_count 直接设为 {max_failures}，硬禁用（不自动恢复）："
+                    f"{error_message[:200] if error_message else ''}"
                 )
             else:
                 record["failure_count"] = record.get("failure_count", 0) + 1
+                if record["failure_count"] >= max_failures:
+                    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    record["disabled_at"] = now_str
+                    record["cooldown_until"] = self._compute_cooldown_until(now_str)
+                    logger.warning(
+                        f"Agent Tokens 供应商 [{provider_id}] 连续失败 {record['failure_count']} 次，"
+                        f"达到阈值 {max_failures}，进入冷却"
+                    )
             record["last_error"] = error_message[:500] if error_message else None
             usage[provider_id] = record
             self._save_usage(usage)
@@ -1005,6 +1489,12 @@ class AgentTokensPro(_PluginBase):
         """
         如果指定供应商是当前活跃供应商，将其从活跃状态中踢出。
         清除手动锁定，触发下次 select_llm_provider 时自动选择新供应商。
+
+        严格排除故障节点：通过 exclude_provider_id 防止 _select_provider
+        重新选中刚失败的供应商（瞬时错误未达阈值时仍可能被判定为"可用"）。
+
+        若排除后候选池为空，将活跃供应商置为 None，记录 ERROR 日志，
+        并抛出 NoAvailableProviderError 供上层捕获。
         """
         if not provider_id:
             return
@@ -1019,19 +1509,25 @@ class AgentTokensPro(_PluginBase):
         self._active_provider_id = None
         self._manual_override = False
         logger.warning(
-            f"Agent Tokens 活跃供应商 [{old_name}] 被踢出（测试连通性硬故障）"
+            f"Agent Tokens 活跃供应商 [{old_name}] 被踢出（故障切换）"
         )
 
-        # 尝试立即选择新供应商
-        new_provider = self._select_provider()
+        # 尝试立即选择新供应商（带预检探针，严格排除故障节点）
+        new_provider = self._select_provider(exclude_provider_id=provider_id)
         if new_provider:
             self._active_provider_id = new_provider.get("id")
             new_name = new_provider.get("name", new_provider.get("id"))
             logger.info(f"Agent Tokens 自动切换到新供应商 [{new_name}]")
-            self._notify_switch(old_name, new_name, "测试连通性失败，活跃供应商被踢出")
+            self._notify_switch(old_name, new_name, "故障切换，活跃供应商被踢出")
         else:
-            logger.warning("Agent Tokens 没有其他可用供应商，活跃状态已清空")
-            self._notify_switch(old_name, None, "测试连通性失败，无其他可用供应商")
+            logger.error(
+                f"Agent Tokens 所有供应商均不可用，无法完成自动切换"
+                f"（已排除故障节点 [{old_name}]）"
+            )
+            self._notify_switch(old_name, None, "故障切换失败，无其他可用供应商")
+            raise NoAvailableProviderError(
+                f"所有供应商均不可用，无法完成自动切换（已排除故障节点 [{old_name}]）"
+            )
 
     def test_connection_api(self, payload: Optional[dict] = Body(default=None)) -> schemas.Response:
         """
@@ -1048,18 +1544,11 @@ class AgentTokensPro(_PluginBase):
         测试成功时重置 failure_count 为 0。
         前端通过 loadStatus() 刷新状态，response 不携带 data 字段以避免 unwrapResponse 误解包。
         """
-        import time as _time
-        _t0 = _time.monotonic()
         payload = payload or {}
         base_url = self._clean_text(payload.get("base_url")).rstrip("/")
         api_key = self._clean_text(payload.get("api_key"))
         model = self._clean_text(payload.get("model"))
         provider_id = self._clean_text(payload.get("provider_id"))
-
-        logger.debug(
-            f"AgentTokens test_connection_api START | provider_id={provider_id} "
-            f"base_url={base_url} model={model} api_key={'***' + api_key[-4:] if api_key else 'N/A'}"
-        )
 
         # 输入校验失败不标记故障（属于配置缺失，非连通性问题）
         if not api_key:
@@ -1069,17 +1558,31 @@ class AgentTokensPro(_PluginBase):
         if not model:
             return schemas.Response(success=False, message="缺少模型名称，无法执行对话测试")
 
-        def _fail(msg: str, hard: bool = True) -> schemas.Response:
+        def _fail(msg: str, hard: bool = None) -> schemas.Response:
             """
             标记供应商标记为故障并返回失败响应。
-            hard=True 时直接将 failure_count 设为 max_failures（硬故障，立即跳过）。
+            hard=None 时自动根据 _classify_error 判断错误类型：
+              - ERROR_TYPE_FATAL → hard=True（立即跳过 + 冷却）
+              - ERROR_TYPE_TRANSIENT / UNKNOWN → hard=False（递增计数）
             若该供应商是当前活跃节点，踢出并触发切换。
+            若切换时无其他可用供应商，捕获 NoAvailableProviderError，
+            仍返回失败响应（不中断 API 调用）。
             """
-            logger.warning(f"AgentTokens test_connection_api FAIL | provider_id={provider_id} msg={msg}")
+            # 自动分类错误类型
+            if hard is None:
+                error_type = self._classify_error(msg)
+                hard = (error_type == self.ERROR_TYPE_FATAL)
+            logger.warning(f"AgentTokens test_connection_api FAIL | provider_id={provider_id} msg={msg} hard={hard}")
             if provider_id:
                 self._mark_provider_faulty(provider_id, msg, hard_failure=hard)
                 # 如果故障供应商是当前活跃节点，踢出并触发切换
-                self._kick_active_provider_if_faulty(provider_id)
+                try:
+                    self._kick_active_provider_if_faulty(provider_id)
+                except NoAvailableProviderError:
+                    logger.error(
+                        f"AgentTokens test_connection_api: 供应商 [{provider_id}] 故障后"
+                        f"无其他可用供应商，活跃状态已清空"
+                    )
             # 不携带 data 字段：unwrapResponse 在 data 非空时会返回 data 而非根对象，
             # 导致前端读不到 success/message 字段。前端通过 loadStatus() 刷新状态。
             return schemas.Response(success=False, message=msg)
@@ -1093,20 +1596,15 @@ class AgentTokensPro(_PluginBase):
             headers["User-Agent"] = payload["user_agent"]
 
         # ── 阶段 1：GET /models 探测 ──────────────────────────────
-        _t1 = _time.monotonic()
+        stage1_url = f"{base_url}/models"
         try:
-            resp = requests.get(f"{base_url}/models", headers=headers, timeout=15)
+            resp = requests.get(stage1_url, headers=headers, timeout=15)
         except requests.exceptions.ConnectionError as err:
             return _fail(f"连接失败: 无法连接到服务器 ({err})")
         except requests.exceptions.Timeout:
             return _fail("连接超时: 服务器无响应")
         except Exception as err:
             return _fail(f"连接失败: {err}")
-
-        logger.debug(
-            f"AgentTokens test_connection_api STAGE1 | status={resp.status_code} "
-            f"elapsed={_time.monotonic() - _t1:.2f}s"
-        )
 
         if resp.status_code >= 400:
             brief = self._status_brief(resp.status_code)
@@ -1140,19 +1638,15 @@ class AgentTokensPro(_PluginBase):
             "stream": True,
         }
 
-        _t2 = _time.monotonic()
+        stage2_url = f"{base_url}/chat/completions"
         try:
             with requests.post(
-                f"{base_url}/chat/completions",
+                stage2_url,
                 headers=headers,
                 json=chat_payload,
                 timeout=10,
                 stream=True,
             ) as chat_resp:
-                logger.debug(
-                    f"AgentTokens test_connection_api STAGE2 | status={chat_resp.status_code} "
-                    f"elapsed={_time.monotonic() - _t2:.2f}s"
-                )
                 # 状态码优先判断
                 if chat_resp.status_code >= 400:
                     brief = self._status_brief(chat_resp.status_code)
@@ -1169,7 +1663,6 @@ class AgentTokensPro(_PluginBase):
                 # 使用 iter_content 替代 iter_lines，避免无尾 \n 时阻塞挂起
                 raw_snippet = ""  # 收集原始内容用于异常诊断日志
                 stream_error_msg = ""
-                _t3 = _time.monotonic()
 
                 try:
                     _chunk_count = 0
@@ -1235,12 +1728,6 @@ class AgentTokensPro(_PluginBase):
                         if not line.startswith(":") and '"error"' not in line:
                             _done = True  # 有内容即视为成功
 
-                    logger.debug(
-                        f"AgentTokens test_connection_api STREAM DONE | chunks={_chunk_count} "
-                        f"done={_done} error={stream_error_msg or 'none'} "
-                        f"elapsed={_time.monotonic() - _t3:.2f}s"
-                    )
-
                     if stream_error_msg:
                         return _fail(f"对话测试失败: 服务器返回错误 - {stream_error_msg}")
 
@@ -1274,22 +1761,32 @@ class AgentTokensPro(_PluginBase):
         except Exception as err:
             return _fail(f"对话测试失败: {err}")
 
-        # 测试成功：重置故障计数
+        # 测试成功：无条件重置所有故障标记
         if provider_id:
             with self._usage_lock:
                 usage = self._load_usage()
                 record = usage.get(provider_id, {})
+                _changed = False
                 if record.get("failure_count", 0) > 0:
                     logger.debug(f"Agent Tokens 供应商 [{provider_id}] 测试连接成功，重置失败计数")
                     record["failure_count"] = 0
+                    _changed = True
+                if record.get("last_error") is not None:
                     record["last_error"] = None
+                    _changed = True
+                if record.get("disabled_at") is not None:
+                    record.pop("disabled_at", None)
+                    _changed = True
+                if record.get("cooldown_until") is not None:
+                    record.pop("cooldown_until", None)
+                    _changed = True
+                if record.get("hard_disabled") is not None:
+                    record.pop("hard_disabled", None)
+                    _changed = True
+                if _changed:
                     usage[provider_id] = record
                     self._save_usage(usage)
 
-        logger.debug(
-            f"AgentTokens test_connection_api SUCCESS | provider_id={provider_id} "
-            f"total_elapsed={_time.monotonic() - _t0:.2f}s"
-        )
         return schemas.Response(
             success=True,
             message="连接成功（鉴权通过 + 对话测试通过）",
@@ -1297,7 +1794,7 @@ class AgentTokensPro(_PluginBase):
 
     def _is_provider_available(self, provider: dict) -> bool:
         """
-        检查供应商是否可用（启用、有配置、未耗尽、未超过失败阈值）。
+        检查供应商是否可用（启用、有配置、未耗尽、未超过失败阈值或已过冷却期）。
         """
         if not provider:
             return False
@@ -1309,9 +1806,14 @@ class AgentTokensPro(_PluginBase):
         provider_usage = self._provider_usage(provider, usage)
         if provider_usage["exhausted"]:
             return False
+        # 硬禁用供应商（401/402/403/404/429 致命错误）不自动恢复，只能手动重置
+        if provider_usage.get("hard_disabled"):
+            return False
         max_failures = getattr(self, "_max_failures", self.DEFAULT_MAX_FAILURES)
         if provider_usage.get("failure_count", 0) >= max_failures:
-            return False
+            # 检查冷却恢复
+            if not self._check_cooldown_recovery(provider.get("id"), usage):
+                return False
         return True
 
     @eventmanager.register(ChainEventType.AgentLLMProvider, priority=50)
@@ -1347,7 +1849,49 @@ class AgentTokensPro(_PluginBase):
                     break
 
             if manual_provider and self._is_provider_available(manual_provider):
-                # 手动选择的供应商仍可用，继续使用
+                # 手动选择的供应商基础检查通过，执行预检探针
+                if not self._preflight_check(manual_provider):
+                    logger.warning(
+                        f"Agent Tokens 手动锁定供应商 [{manual_provider.get('name')}] "
+                        f"预检探针失败，降级到自动选择模式"
+                    )
+                    old_name = manual_provider.get("name", current_active_id)
+                    self._manual_override = False
+                    # 降级到自动选择（排除刚失败的供应商，防止切换回自身）
+                    provider = self._select_provider(exclude_provider_id=current_active_id)
+                    if not provider:
+                        logger.debug("Agent Tokens 没有可用供应商，Agent 将使用系统 LLM 配置")
+                        self._active_provider_id = None
+                        if old_name:
+                            self._notify_switch(old_name, "无可用供应商", "手动锁供应商预检失败且无替代")
+                        return
+                    provider_name = provider.get("name")
+                    model = provider.get("model")
+                    old_active_id = current_active_id
+                    self._active_provider_id = provider.get("id")
+                    logger.debug(f"Agent Tokens 分配 LLM 供应商：[{provider_name}] 模型：[{model}]")
+                    with self._usage_lock:
+                        usage = self._load_usage()
+                        pid = provider.get("id")
+                        if pid:
+                            entry = usage.get(pid, {})
+                            entry["last_used_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            usage[pid] = entry
+                            self._save_usage(usage)
+                    self._notify_switch(old_name, provider_name, "手动锁供应商预检失败，已自动切换")
+                    self._event_set(event.event_data, "provider", provider.get("provider") or "openai")
+                    self._event_set(event.event_data, "base_url", provider.get("base_url"))
+                    self._event_set(event.event_data, "api_key", provider.get("api_key"))
+                    self._event_set(event.event_data, "user_agent", provider.get("user_agent"))
+                    self._event_set(event.event_data, "use_proxy", bool(provider.get("use_proxy", True)))
+                    self._event_set(event.event_data, "model", provider.get("model"))
+                    self._event_set(event.event_data, "base_url_preset", None)
+                    self._event_set(event.event_data, "selected_provider_id", provider.get("id"))
+                    self._event_set(event.event_data, "selected_provider_name", provider.get("name"))
+                    self._event_set(event.event_data, "source", self.__class__.__name__)
+                    return
+
+                # 预检通过，继续使用手动锁定的供应商
                 provider_name = manual_provider.get("name")
                 model = manual_provider.get("model")
                 logger.debug(f"Agent Tokens 手动锁定模式：继续使用 [{provider_name}] 模型：[{model}]")
@@ -1383,7 +1927,26 @@ class AgentTokensPro(_PluginBase):
                 self._manual_override = False
 
         # 自动选择模式
-        provider = self._select_provider()
+        # 优先复用当前活跃供应商（如果仍然健康），避免无故障时频繁轮换
+        # 仅当当前活跃供应商不可用或预检失败时，才排除并选择新供应商
+        provider = None
+        if current_active_id:
+            current_provider = next((p for p in self._providers if p.get("id") == current_active_id), None)
+            if current_provider and self._is_provider_available(current_provider) and self._preflight_check(current_provider):
+                # 当前活跃供应商仍然健康，继续复用
+                provider = current_provider
+                logger.debug(f"Agent Tokens 当前活跃供应商 [{current_provider.get('name')}] 仍然健康，继续复用")
+            else:
+                # 当前活跃供应商不可用或预检失败，排除并选择新供应商
+                if current_provider:
+                    logger.warning(
+                        f"Agent Tokens 当前活跃供应商 [{current_provider.get('name')}] 不可用或预检失败，切换到其他供应商"
+                    )
+                provider = self._select_provider(exclude_provider_id=current_active_id)
+        else:
+            # 无当前活跃供应商，正常选择
+            provider = self._select_provider()
+
         if not provider:
             logger.debug("Agent Tokens 没有可用供应商，Agent 将使用系统 LLM 配置")
             self._active_provider_id = None
@@ -1462,36 +2025,68 @@ class AgentTokensPro(_PluginBase):
                 if record.get("failure_count", 0) > 0:
                     logger.debug(f"Agent Tokens 供应商 [{provider_name}] 调用成功，重置失败计数")
                     record["failure_count"] = 0
+                # 清除冷却标记，确保成功后完全恢复
+                record.pop("disabled_at", None)
+                record.pop("cooldown_until", None)
+                record.pop("hard_disabled", None)
             else:
                 error_text = self._clean_text(self._event_get(event.event_data, "error"))
-                record["last_error"] = error_text
-                # 区分致命错误（不可恢复）与临时性错误（可重试）
-                error_lower = error_text.lower() if error_text else ""
-                is_fatal = False
-                for fatal_code in ["401", "402", "403"]:
-                    if fatal_code in error_lower:
-                        is_fatal = True
-                        break
-                if is_fatal:
-                    # 致命错误：直接将 failure_count 设为最大阈值，立即跳过
+                # 分层错误处理：使用 _classify_error 统一分类
+                error_type = self._classify_error(error_text or "")
+
+                if error_type == "cancelled":
+                    # 用户主动取消/中断任务，不增加失败计数，不触发供应商切换
+                    logger.info(f"Agent Tokens 供应商 [{provider_name}] 调用被用户取消，不计入故障")
+                elif error_type == self.ERROR_TYPE_FATAL:
+                    # 致命错误（401/402/403/404/429）：立即跳过 + 硬禁用（不自动恢复）
                     record["failure_count"] = max_failures
+                    record["hard_disabled"] = True
+                    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    record["disabled_at"] = now_str
+                    record.pop("cooldown_until", None)
+                    record["last_error"] = error_text
                     logger.warning(
                         f"Agent Tokens 供应商 [{provider_name}] 致命错误（{error_text}），"
-                        f"直接标记为故障跳过"
+                        f"立即跳过并硬禁用（不自动恢复）"
                     )
                 else:
-                    # 临时性错误（429 限流、504 超时、网络异常等）：正常计数
+                    # 瞬时错误或未知错误：递增计数，达到阈值进入冷却
                     record["failure_count"] = self._to_int(record.get("failure_count"), 0) + 1
+                    record["last_error"] = error_text
+                    if record["failure_count"] >= max_failures:
+                        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        record["disabled_at"] = now_str
+                        record["cooldown_until"] = self._compute_cooldown_until(now_str)
+                        logger.warning(
+                            f"Agent Tokens 供应商 [{provider_name}] 连续失败 {record['failure_count']} 次，"
+                            f"达到阈值 {max_failures}，进入冷却"
+                        )
+                # 清除预检缓存
+                with self._preflight_cache_lock:
+                    self._preflight_cache.pop(provider_id, None)
             record["last_model"] = self._clean_text(self._event_get(event.event_data, "model"))
             record["last_used_at"] = (
                 self._clean_text(self._event_get(event.event_data, "finished_at"))
                 or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             )
             usage[provider_id] = record
-            
+
             logger.debug(f"Agent Tokens 更新用量记录：供应商 [{provider_name}] 本次消耗了 {total_tokens} Tokens")
-            
+
             self._save_usage(usage)
+
+        # 故障后检查是否需要踢出活跃供应商（在锁外执行，避免死锁）
+        if not bool(self._event_get(event.event_data, "success", False)):
+            error_text = self._clean_text(self._event_get(event.event_data, "error"))
+            # 非取消类错误才触发踢出与故障切换
+            if self._classify_error(error_text or "") != "cancelled":
+                try:
+                    self._kick_active_provider_if_faulty(provider_id)
+                except NoAvailableProviderError:
+                    logger.error(
+                        f"Agent Tokens 供应商 [{provider_id}] 故障后无其他可用供应商，"
+                        f"活跃状态已清空，等待下次 select_llm_provider 时重新选择"
+                    )
 
     @eventmanager.register(EventType.PluginReload)
     def reload(self, event: Event):

@@ -1,6 +1,6 @@
 import { importShared } from './__federation_fn_import-JrT3xvdd.js';
-import { A as AgentTokensManager } from './AgentTokensManager-CGhDRQGo.js';
-import { _ as _export_sfc, u as unwrapResponse } from './_plugin-vue_export-helper-DiiWc7O6.js';
+import { A as AgentTokensManager } from './AgentTokensManager-CgH0hXfe.js';
+import { _ as _export_sfc, u as unwrapResponse } from './_plugin-vue_export-helper-MUdERlsH.js';
 
 const {createVNode:_createVNode,openBlock:_openBlock,createElementBlock:_createElementBlock} = await importShared('vue');
 
@@ -39,7 +39,7 @@ let refreshTimer = null;
 const managerRef = ref(null);
 const vendors = ref([]);
 const status = ref({
-  config: { enabled: false, show_sidebar_nav: true, max_failures: 3, providers: [] },
+  config: { enabled: false, show_sidebar_nav: true, max_failures: 3, max_retries: 2, providers: [] },
   providers: [],
   summary: {},
   active_provider_id: null,
@@ -47,7 +47,7 @@ const status = ref({
 
 // 构造 API 基础路径。
 const pluginBase = computed(() => `plugin/${props.pluginId || 'AgentTokensPro'}`);
-const config = computed(() => status.value.config || { enabled: false, show_sidebar_nav: true, max_failures: 3, providers: [] });
+const config = computed(() => status.value.config || { enabled: false, show_sidebar_nav: true, max_failures: 3, max_retries: 2, providers: [] });
 const providerRows = computed(() => status.value.providers || []);
 const summary = computed(() => status.value.summary || {});
 const activeProviderId = computed(() => status.value.active_provider_id || null);
@@ -99,6 +99,7 @@ async function saveConfig() {
       enabled: Boolean(config.value.enabled),
       show_sidebar_nav: Boolean(config.value.show_sidebar_nav),
       max_failures: Number(config.value.max_failures) || 3,
+      max_retries: Number(config.value.max_retries ?? 2),
       providers: [...(config.value.providers || [])],
       active_provider_id: status.value.active_provider_id || null,
     };
@@ -125,12 +126,19 @@ async function selectProvider(providerId) {
   const provider = providers.find(p => p.id === providerId);
   if (!provider) return
 
-  // 检查供应商是否处于故障状态（连续失败达到阈值）
+  // 检查供应商是否处于故障状态（连续失败达到阈值或硬禁用）
   const providerWithUsage = status.value.providers?.find(p => p.id === providerId);
   const failureCount = providerWithUsage?.usage?.failure_count || 0;
   const maxFailures = config.value.max_failures || 3;
+  const isHardDisabled = !!providerWithUsage?.usage?.hard_disabled;
+  if (isHardDisabled) {
+    showFeedback('error', `供应商 [${provider.name}] 已被硬禁用（鉴权失败），无法直接启用。请先检查 API Key 并测试连通性。`);
+    return
+  }
   if (failureCount >= maxFailures) {
-    showFeedback('error', `供应商 [${provider.name}] 已连续失败 ${failureCount} 次，处于故障状态，无法直接启用。请先测试连通性确认恢复后再启用。`);
+    const isCooldown = !!providerWithUsage?.usage?.disabled_at;
+    const statusLabel = isCooldown ? '冷却中' : '故障';
+    showFeedback('error', `供应商 [${provider.name}] 当前处于${statusLabel}状态（连续失败 ${failureCount} 次），无法直接启用。请先测试连通性确认恢复后再启用。`);
     return
   }
 
@@ -279,6 +287,19 @@ function showFeedback(type, message) {
   }, 5000);
 }
 
+// 重置指定供应商的失败计数和冷却状态（解冻），保留用量统计。
+async function resetFailures(providerId) {
+  if (!providerId) return
+  loading.value = true;
+  try {
+    const response = await props.api.post(`${pluginBase.value}/usage/reset_failures`, { provider_id: providerId });
+    status.value = unwrapResponse(response) || status.value;
+    showFeedback('success', '已重置失败计数');
+  } finally {
+    loading.value = false;
+  }
+}
+
 // 重置指定供应商的运行记录并自动保存。
 async function resetUsage(providerId) {
   if (!providerId) return
@@ -362,6 +383,7 @@ return (_ctx, _cache) => {
       onAutoSave: autoSave,
       onResetUsage: resetUsage,
       onResetAllUsage: resetAllUsage,
+      onResetFailures: resetFailures,
       onQueryModels: queryModels,
       onTestConnection: testConnection,
       onSelectProvider: selectProvider,
@@ -372,6 +394,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const AppPage = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-c6055d15"]]);
+const AppPage = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-244ad0ae"]]);
 
 export { AppPage as default };

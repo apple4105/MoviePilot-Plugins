@@ -1,5 +1,5 @@
 import { importShared } from './__federation_fn_import-JrT3xvdd.js';
-import { _ as _export_sfc, f as formatTokens, u as unwrapResponse } from './_plugin-vue_export-helper-DiiWc7O6.js';
+import { _ as _export_sfc, f as formatTokens, u as unwrapResponse } from './_plugin-vue_export-helper-MUdERlsH.js';
 
 const {resolveComponent:_resolveComponent,createVNode:_createVNode,withCtx:_withCtx,toDisplayString:_toDisplayString,createTextVNode:_createTextVNode,openBlock:_openBlock,createElementBlock:_createElementBlock,createCommentVNode:_createCommentVNode,createBlock:_createBlock,createElementVNode:_createElementVNode,unref:_unref,renderList:_renderList,Fragment:_Fragment,normalizeClass:_normalizeClass} = await importShared('vue');
 
@@ -149,12 +149,14 @@ const visibleProviderLimit = computed(() => {
 const sortedProviders = computed(() => {
   const list = [...providers.value];
   return list.sort((a, b) => {
+    const aCooldown = isProviderCooldown(a);
+    const bCooldown = isProviderCooldown(b);
     const aFaulty = isProviderFaulty(a);
     const bFaulty = isProviderFaulty(b);
     const aMisconf = isProviderMisconfigured(a);
     const bMisconf = isProviderMisconfigured(b);
-    const aRank = aFaulty ? 2 : (aMisconf ? 1 : 0);
-    const bRank = bFaulty ? 2 : (bMisconf ? 1 : 0);
+    const aRank = aCooldown ? 3 : (aFaulty ? 2 : (aMisconf ? 1 : 0));
+    const bRank = bCooldown ? 3 : (bFaulty ? 2 : (bMisconf ? 1 : 0));
     return aRank - bRank
   })
 });
@@ -180,12 +182,27 @@ const lastRefreshedTime = computed(() => {
   })
 });
 
-// 判断供应商是否处于故障状态（连续失败达到阈值或额度耗尽或已禁用）
+// 判断供应商是否处于故障状态（连续失败达到阈值或额度耗尽或已禁用或硬禁用）
+// 冷却中（disabled_at 存在）不算硬故障，名称不标红
 function isProviderFaulty(row) {
   const maxFailures = status.value?.config?.max_failures || 3;
   const failureCount = row?.usage?.failure_count || 0;
-  const faulty = failureCount >= maxFailures || row?.usage?.exhausted || !row?.enabled;
-  return faulty
+  if (row?.usage?.hard_disabled) return true
+  if (row?.usage?.exhausted) return true
+  if (!row?.enabled) return true
+  if (failureCount >= maxFailures) return !row?.usage?.disabled_at
+  return false
+}
+
+// 判断供应商是否处于冷却中（失败达阈值且 disabled_at 存在，且非硬禁用）
+function isProviderCooldown(row) {
+  const maxFailures = status.value?.config?.max_failures || 3;
+  const failureCount = row?.usage?.failure_count || 0;
+  if (!row?.enabled) return false
+  if (row?.usage?.hard_disabled) return false
+  if (row?.usage?.exhausted) return false
+  if (failureCount >= maxFailures) return !!row?.usage?.disabled_at
+  return false
 }
 
 // 判断供应商是否缺少必要配置（无 api_key / base_url / model）
@@ -402,7 +419,8 @@ return (_ctx, _cache) => {
                                   _createElementVNode("div", {
                                     class: _normalizeClass(["agenttokens-dashboard-provider__name", {
                     'agenttokens-dashboard-provider__name--faulty': isProviderFaulty(row),
-                    'agenttokens-dashboard-provider__name--misconfigured': !isProviderFaulty(row) && isProviderMisconfigured(row),
+                    'agenttokens-dashboard-provider__name--cooldown': isProviderCooldown(row),
+                    'agenttokens-dashboard-provider__name--misconfigured': !isProviderFaulty(row) && !isProviderCooldown(row) && isProviderMisconfigured(row),
                   }])
                                   }, _toDisplayString(row.name || '未命名供应商'), 3),
                                   _createElementVNode("div", _hoisted_13, _toDisplayString(row.model || '未配置模型'), 1)
@@ -410,12 +428,12 @@ return (_ctx, _cache) => {
                                 _createElementVNode("div", _hoisted_14, _toDisplayString(_unref(formatTokens)(row.usage?.total_tokens)), 1),
                                 _createVNode(_component_VChip, {
                                   size: "x-small",
-                                  color: isProviderFaulty(row) ? 'error' : (isProviderMisconfigured(row) ? 'warning' : 'success'),
+                                  color: isProviderFaulty(row) ? 'error' : (isProviderCooldown(row) ? 'info' : (isProviderMisconfigured(row) ? 'warning' : 'success')),
                                   variant: "tonal",
                                   class: "agenttokens-dashboard-provider__status"
                                 }, {
                                   default: _withCtx(() => [
-                                    _createTextVNode(_toDisplayString(isProviderFaulty(row) ? (row.usage?.exhausted ? '耗尽' : '故障') : (isProviderMisconfigured(row) ? '缺配置' : '可用')), 1)
+                                    _createTextVNode(_toDisplayString(isProviderFaulty(row) ? (row.usage?.exhausted ? '耗尽' : '故障') : (isProviderCooldown(row) ? '冷却中' : (isProviderMisconfigured(row) ? '缺配置' : '可用'))), 1)
                                   ]),
                                   _: 2
                                 }, 1032, ["color"])
@@ -476,6 +494,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Dashboard = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-d84eec1a"]]);
+const Dashboard = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-5766d6b9"]]);
 
 export { Dashboard as default };

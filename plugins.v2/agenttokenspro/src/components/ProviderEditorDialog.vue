@@ -25,7 +25,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['update:modelValue', 'commit', 'query-models', 'test-connection'])
+const emit = defineEmits(['update:modelValue', 'commit', 'query-models', 'test-connection', 'delete'])
 
 const modelOptions = ref([])
 const loadingModels = ref(false)
@@ -139,7 +139,7 @@ watch(testResult, (val) => {
   }
 })
 
-// 监听 API 地址变化：若选中预置厂商，自动填充名称
+// 监听 API 地址变化：若选中预置厂商，自动填充名称（重名时追加数字）
 watch(
   () => props.provider.base_url,
   (newUrl) => {
@@ -147,9 +147,22 @@ watch(
     const cleanUrl = extractPureUrl(newUrl)
     const matchedVendor = props.vendors.find(v => v.url === cleanUrl)
     if (matchedVendor && matchedVendor.name) {
-      // 仅在名称为空或未修改时自动填充
-      if (!props.provider.name || props.provider.name.trim() === '') {
-        props.provider.name = matchedVendor.name
+      const vendorName = matchedVendor.name.trim()
+      // 收集除当前编辑项外的所有已存在名称
+      const existingNames = props.existingProviders
+        .filter((_, i) => props.editorIndex < 0 || i !== props.editorIndex)
+        .map(p => (p.name || '').trim())
+      // 无论名称为空还是已有值，都检查重名并追加数字
+      if (!existingNames.includes(vendorName)) {
+        props.provider.name = vendorName
+      } else {
+        // 重名：解析基础名称并追加数字
+        const baseName = vendorName.replace(/\d+$/, '').trim() || vendorName
+        let suffix = 1
+        while (existingNames.includes(`${baseName}${suffix}`)) {
+          suffix++
+        }
+        props.provider.name = `${baseName}${suffix}`
       }
     }
   }
@@ -200,6 +213,7 @@ async function testConnection() {
     api_key: props.provider.api_key,
     model: props.provider.model,
     provider: props.provider.provider,
+    provider_id: props.provider.id || null,
   }
   try {
     const result = await new Promise((resolve, reject) => {
@@ -220,6 +234,12 @@ async function testConnection() {
   }
 }
 
+// 删除当前编辑的供应商：直接关闭弹窗并通知父组件（由父组件统一确认）
+function handleDelete() {
+  dialogVisible.value = false
+  emit('delete', props.provider?.id)
+}
+
 // 提交当前弹窗编辑的供应商配置。
 function commitProvider() {
   const model = props.provider.model
@@ -233,6 +253,28 @@ function commitProvider() {
   }
   // 清洗 URL，确保传给后端的是纯 API 地址
   props.provider.base_url = extractPureUrl(props.provider.base_url)
+
+  // 名称校验：为空则提示并阻止提交
+  const currentName = (props.provider.name || '').trim()
+  if (!currentName) {
+    testResult.value = { success: false, message: '名称不能为空' }
+    return
+  }
+
+  // 名称重名自动加数字后缀
+  if (currentName) {
+    const baseName = currentName.replace(/\d+$/, '').trim() || currentName
+    const existingNames = props.existingProviders
+      .filter((_, i) => props.editorIndex < 0 || i !== props.editorIndex)
+      .map(p => (p.name || '').trim())
+    if (existingNames.includes(currentName)) {
+      let suffix = 1
+      while (existingNames.includes(`${baseName}${suffix}`)) {
+        suffix++
+      }
+      props.provider.name = `${baseName}${suffix}`
+    }
+  }
 
   // API Key 重名校验
   const currentKey = (props.provider.api_key || '').trim()
@@ -394,7 +436,27 @@ async function queryModels() {
     <VCard>
       <VCardTitle class="d-flex align-center">
         <span>{{ isEdit ? '编辑供应商' : '新增供应商' }}</span>
+        <VFadeTransition>
+          <span
+            v-if="clipboardHint"
+            class="ml-2 text-caption"
+            :class="clipboardHintColor === 'error' ? 'text-error' : clipboardHintColor === 'success' ? 'text-success' : clipboardHintColor === 'warning' ? 'text-warning' : 'text-info'"
+          >
+            {{ clipboardHint }}
+          </span>
+        </VFadeTransition>
         <VSpacer />
+        <VBtn
+          v-if="isEdit"
+          prepend-icon="mdi-delete-outline"
+          size="small"
+          variant="tonal"
+          color="error"
+          class="mr-2"
+          @click.stop="handleDelete"
+        >
+          删除
+        </VBtn>
         <VBtn
           prepend-icon="mdi-clipboard-arrow-down"
           size="small"
@@ -431,6 +493,26 @@ async function queryModels() {
           />
         </div>
         <div class="form-item">
+          <span class="form-label">API Key</span>
+          <div class="input-group">
+            <VTextField
+              v-model="provider.api_key"
+              :type="isEdit && !showApiKey ? 'password' : 'text'"
+              variant="outlined"
+              hide-details
+              class="apikey-field"
+            />
+            <VBtn
+              v-if="isEdit"
+              :icon="showApiKey ? 'mdi-eye-off' : 'mdi-eye'"
+              size="small"
+              variant="tonal"
+              class="input-action-btn"
+              @click.stop="showApiKey = !showApiKey"
+            />
+          </div>
+        </div>
+        <div class="form-item">
           <span class="form-label">{{ modelCountText }}</span>
           <div class="input-group">
             <VCombobox
@@ -450,26 +532,6 @@ async function queryModels() {
               :loading="loadingModels"
               class="input-action-btn"
               @click.stop="queryModels"
-            />
-          </div>
-        </div>
-        <div class="form-item">
-          <span class="form-label">API Key</span>
-          <div class="input-group">
-            <VTextField
-              v-model="provider.api_key"
-              :type="isEdit && !showApiKey ? 'password' : 'text'"
-              variant="outlined"
-              hide-details
-              class="apikey-field"
-            />
-            <VBtn
-              v-if="isEdit"
-              :icon="showApiKey ? 'mdi-eye-off' : 'mdi-eye'"
-              size="small"
-              variant="tonal"
-              class="input-action-btn"
-              @click.stop="showApiKey = !showApiKey"
             />
           </div>
         </div>
@@ -520,16 +582,6 @@ async function queryModels() {
       </div>
     </VCard>
   </VDialog>
-  <VSnackbar
-    :model-value="!!clipboardHint"
-    :timeout="2500"
-    location="top"
-    :color="clipboardHintColor"
-    variant="tonal"
-    @update:model-value="v => { if (!v) clipboardHint = '' }"
-  >
-    {{ clipboardHint }}
-  </VSnackbar>
 
   <!-- 剪贴板读取失败时的手动粘贴弹窗 -->
   <VDialog v-model="showPasteDialog" max-width="520" persistent>
@@ -593,8 +645,9 @@ async function queryModels() {
 }
 
 .form-item__half .form-label {
-  width: 72px;
+  width: 80px;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .form-item__half > .v-input {
@@ -622,12 +675,6 @@ async function queryModels() {
   min-height: 36px !important;
   border-radius: 6px;
   background: rgba(var(--v-theme-on-surface), 0.04);
-}
-
-/* 下拉箭头 */
-.dropdown-arrow {
-  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
-  margin-right: 4px;
 }
 
 /* 防止移动端图标被挤出屏幕 */
@@ -700,6 +747,7 @@ async function queryModels() {
 
   .form-item__half .form-label {
     width: 60px;
+    white-space: nowrap;
   }
 }
 </style>

@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { formatTokens } from '../provider'
 
 const props = defineProps({
@@ -27,14 +27,27 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  maxFailures: {
+    type: Number,
+    default: 3,
+  },
 })
 
-const emit = defineEmits(['edit', 'remove', 'select', 'toggle', 'reorder'])
+const emit = defineEmits(['edit', 'remove', 'select', 'toggle', 'reorder', 'reset-failures'])
 
-const testingRowId = ref(null)
-const testResult = ref(null)
 const dragIndex = ref(-1)
 const dragOverIndex = ref(-1)
+
+// 排序：正常(0) > 缺配置(1) > 故障/耗尽(2) > 冷却中(3) > 硬禁用(4)，同组保持原始顺序
+// 拖拽模式下不排序，保持用户拖拽顺序
+const sortedProviders = computed(() => {
+  if (props.dragMode) return [...props.providers]
+  return [...props.providers].sort((a, b) => {
+    const aRank = isHardDisabled(a) ? 4 : (isCooldown(a) ? 3 : (isFaulty(a) ? 2 : (isMisconfigured(a) ? 1 : 0)))
+    const bRank = isHardDisabled(b) ? 4 : (isCooldown(b) ? 3 : (isFaulty(b) ? 2 : (isMisconfigured(b) ? 1 : 0)))
+    return aRank - bRank
+  })
+})
 
 // 安全获取模型名称字符串，防止 VCombobox 返回对象导致显示 [object Object]
 function getModelName(model) {
@@ -62,19 +75,44 @@ function isFailed(row) {
   return props.failedProviderIds.includes(row.id)
 }
 
-// 点击行切换活跃供应商
-function handleRowClick(index) {
-  const row = props.providers[index]
-  if (!row) return
-  emit('select', row.id)
+// 判断供应商是否处于故障状态（连续失败达到阈值或额度耗尽或已停用或硬禁用）
+// 冷却中（disabled_at 存在）不算硬故障，名称不标红
+function isFaulty(row) {
+  if (!row.enabled) return true
+  const matched = props.providerRows.find(r => r.id === row.id)
+  if (matched?.usage?.hard_disabled) return true
+  if (matched?.usage?.exhausted) return true
+  if ((matched?.usage?.failure_count || 0) >= props.maxFailures) return !matched?.usage?.disabled_at
+  return false
 }
 
-function handleToggle(index) {
-  emit('toggle', index)
+// 判断供应商是否处于冷却中（失败达阈值且 disabled_at 存在，且非硬禁用）
+function isCooldown(row) {
+  if (!row.enabled) return false
+  const matched = props.providerRows.find(r => r.id === row.id)
+  if (matched?.usage?.hard_disabled) return false
+  if (matched?.usage?.exhausted) return false
+  if ((matched?.usage?.failure_count || 0) >= props.maxFailures) return !!matched?.usage?.disabled_at
+  return false
+}
+
+// 判断供应商是否被硬禁用（401/402/403/404/429 致命错误）
+function isHardDisabled(row) {
+  const matched = props.providerRows.find(r => r.id === row.id)
+  return !!matched?.usage?.hard_disabled
+}
+
+// 判断供应商是否缺少必要配置（无 api_key / base_url / model）
+function isMisconfigured(row) {
+  return !row?.api_key || !row?.base_url || !row?.model
+}
+
+function handleToggle(row) {
+  emit('toggle', row.id)
 }
 
 function rowClasses(row) {
-  const idx = props.providers.indexOf(row)
+  const idx = sortedProviders.value.indexOf(row)
   return {
     'provider-row--active': isActive(row),
     'provider-row--failed': isFailed(row),
@@ -117,6 +155,40 @@ function onDragEnd() {
   dragIndex.value = -1
   dragOverIndex.value = -1
 }
+
+// 状态 Chip 颜色
+function rowStatusColor(row) {
+  if (!row.enabled) return 'default'
+  if (isHardDisabled(row)) return 'error'
+  if (isCooldown(row)) return 'info'
+  if (isFaulty(row)) return 'error'
+  if (isMisconfigured(row)) return 'warning'
+  return 'success'
+}
+
+// 状态 Chip 文本
+function rowStatusText(row) {
+  if (!row.enabled) return '已停用'
+  if (isHardDisabled(row)) return '硬禁用'
+  if (isCooldown(row)) return '冷却中'
+  if (isFaulty(row)) return '故障'
+  if (isMisconfigured(row)) return '缺配置'
+  return '正常'
+}
+
+// 冷却剩余时间
+function cooldownRemaining(row) {
+  const matched = props.providerRows.find(r => r.id === row.id)
+  const cooldownUntil = matched?.usage?.cooldown_until
+  if (!cooldownUntil) return null
+  const target = new Date(cooldownUntil.replace(' ', 'T'))
+  const diff = target.getTime() - Date.now()
+  if (diff <= 0) return null
+  const minutes = Math.floor(diff / 60000)
+  const seconds = Math.floor((diff % 60000) / 1000)
+  if (minutes > 0) return `${minutes}m${String(seconds).padStart(2, '0')}s`
+  return `${seconds}s`
+}
 </script>
 
 <template>
@@ -134,17 +206,17 @@ function onDragEnd() {
             <th class="col-proxy">代理</th>
             <th class="col-model">模型</th>
             <th class="col-limit">额度</th>
+            <th class="col-status">状态</th>
             <th class="col-actions">操作</th>
           </tr>
         </thead>
         <tbody>
           <tr
-            v-for="(row, index) in providers"
+            v-for="(row, index) in sortedProviders"
             :key="row.id || index"
             :draggable="dragMode"
             :class="rowClasses(row)"
-            class="clickable-row"
-            @click="handleRowClick(index)"
+            class="provider-row"
             @dragstart="onDragStart(index, $event)"
             @dragover="onDragOver(index, $event)"
             @dragleave="onDragLeave"
@@ -154,12 +226,18 @@ function onDragEnd() {
             <td class="drag-col text-center">
               <VIcon icon="mdi-drag-vertical" size="small" :color="dragMode ? 'primary' : 'disabled'" />
             </td>
-            <td class="col-enable" @click.stop="handleToggle(index)">
+            <td class="col-enable" @click.stop="handleToggle(row)">
               <div class="status-toggle-cell">
                 <span :class="['status-dot', row.enabled ? 'active' : 'inactive']"></span>
               </div>
             </td>
-            <td class="col-name">{{ row.name }}</td>
+            <td class="col-name">
+              <span :class="{
+                'provider-name--faulty': isFaulty(row),
+                'provider-name--cooldown': isCooldown(row),
+                'provider-name--misconfigured': !isFaulty(row) && !isCooldown(row) && isMisconfigured(row),
+              }">{{ row.name }}</span>
+            </td>
             <td class="col-type">{{ row.provider }}</td>
             <td v-if="showCredentials" class="col-url">{{ row.base_url }}</td>
             <td v-if="showCredentials" class="col-key">{{ getMaskedApiKey(row) }}</td>
@@ -170,13 +248,34 @@ function onDragEnd() {
             </td>
             <td class="col-model">{{ getModelName(row.model) }}</td>
             <td class="col-limit">{{ row.token_limit > 0 ? formatTokens(row.token_limit) : '不限' }}</td>
+            <td class="col-status">
+              <VChip size="small" :color="rowStatusColor(row)" variant="tonal">
+                {{ rowStatusText(row) }}
+                <span v-if="isCooldown(row) && cooldownRemaining(row)" class="cooldown-countdown">
+                  ({{ cooldownRemaining(row) }})
+                </span>
+              </VChip>
+            </td>
             <td class="col-actions" @click.stop>
-              <VBtn icon="mdi-pencil" size="small" variant="text" :disabled="isActive(row)" @click="emit('edit', index)" />
-              <VBtn icon="mdi-delete" size="small" variant="text" color="error" :disabled="isActive(row)" @click="emit('remove', index)" />
+              <VTooltip location="top">
+                <template #activator="{ props: tooltipProps }">
+                  <VBtn
+                    v-bind="tooltipProps"
+                    :icon="isHardDisabled(row) ? 'mdi-lock-open-variant-outline' : 'mdi-refresh'"
+                    size="small"
+                    :variant="isHardDisabled(row) ? 'tonal' : 'text'"
+                    :color="isHardDisabled(row) ? 'warning' : undefined"
+                    @click="emit('reset-failures', row.id)"
+                  />
+                </template>
+                {{ isHardDisabled(row) ? '解除硬禁用并重置失败计数' : '重置失败计数与冷却状态' }}
+              </VTooltip>
+              <VBtn icon="mdi-pencil" size="small" variant="text" :disabled="isActive(row)" @click="emit('edit', row.id)" />
+              <VBtn icon="mdi-delete" size="small" variant="text" color="error" :disabled="isActive(row)" @click="emit('remove', row.id)" />
             </td>
           </tr>
-          <tr v-if="!providers.length">
-            <td :colspan="showCredentials ? 10 : 8" class="text-center text-medium-emphasis py-8">暂无供应商</td>
+          <tr v-if="!sortedProviders.length">
+            <td :colspan="showCredentials ? 11 : 9" class="text-center text-medium-emphasis py-8">暂无供应商</td>
           </tr>
         </tbody>
       </VTable>
@@ -187,6 +286,9 @@ function onDragEnd() {
 <style scoped>
 .provider-table-shell {
   overflow-x: auto;
+  max-width: 100% !important;
+  width: 100% !important;
+  min-width: 0 !important;
 }
 
 .provider-table-scroll {
@@ -200,11 +302,33 @@ function onDragEnd() {
   -webkit-overflow-scrolling: touch;
 }
 
-/* 强行撑开表格真实宽度，突破容器 100% 限制 */
+/* 强制消除 Vuetify 卡片及容器宽度与边距限制 */
+:deep(.v-card),
+:deep(.v-card__text),
+:deep(.v-card__body),
+:deep(.v-data-table),
+:deep(.v-data-table__wrapper) {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* 表格撑满容器宽度，窄屏时通过 min-width 保证横向滚动 */
 .provider-table-scroll :deep(table) {
   min-width: 850px !important;
-  width: max-content !important;
+  width: 100% !important;
+  max-width: 100% !important;
   table-layout: auto !important;
+}
+
+/* 确保表格横向完全铺满 */
+:deep(.v-table),
+:deep(.v-data-table > .v-table__wrapper > table) {
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
 }
 
 .provider-table-scroll :deep(table),
@@ -331,28 +455,25 @@ function onDragEnd() {
   width: 80px !important;
 }
 
-/* 操作列 */
-.provider-table-scroll :deep(.col-actions) {
-  width: 88px !important;
-  min-width: 88px !important;
+/* 状态列 */
+.provider-table-scroll :deep(.col-status) {
+  min-width: 90px !important;
+  width: 90px !important;
+  text-align: center !important;
 }
 
-.clickable-row {
-  cursor: pointer;
+/* 操作列 */
+.provider-table-scroll :deep(.col-actions) {
+  width: 120px !important;
+  min-width: 120px !important;
+}
+
+.provider-row {
   transition: background-color 0.15s ease;
 }
 
-.clickable-row:hover {
+.provider-row:hover {
   background: rgba(var(--v-theme-on-surface), 0.04);
-}
-
-/* 仅拖拽模式下行可抓取，非拖拽模式保持普通指针 */
-.clickable-row[draggable="true"] {
-  cursor: grab;
-}
-
-.clickable-row[draggable="true"]:active {
-  cursor: grabbing;
 }
 
 .provider-row--active {
@@ -379,6 +500,28 @@ function onDragEnd() {
 .provider-row--dragging {
   opacity: 0.4;
   background: rgba(var(--v-theme-primary), 0.08);
+}
+
+/* 故障供应商名称红色高亮 */
+.provider-name--faulty {
+  color: #ef4444 !important;
+}
+
+/* 冷却中供应商名称蓝色高亮 */
+.provider-name--cooldown {
+  color: #3b82f6 !important;
+}
+
+/* 未配置供应商名称黄色高亮 */
+.provider-name--misconfigured {
+  color: #eab308 !important;
+}
+
+/* 冷却倒计时文字 */
+.cooldown-countdown {
+  font-size: 0.7rem;
+  opacity: 0.8;
+  margin-left: 2px;
 }
 
 

@@ -67,9 +67,11 @@ const emit = defineEmits([
   'auto-save',
   'reset-usage',
   'reset-all-usage',
+  'reset-failures',
   'query-models',
   'test-connection',
   'select-provider',
+  'test-provider',
 ])
 
 const activeTab = ref('usage')
@@ -78,8 +80,13 @@ const editorIndex = ref(-1)
 const editedProvider = ref(createProvider())
 const failedProviderIds = ref([])
 const testFeedback = ref({ type: '', message: '', show: false })
+
+defineExpose({ failedProviderIds, testFeedback })
 const dragMode = ref(false)
 const importFileInput = ref(null)
+const showDeleteProviderConfirm = ref(false)
+const deleteProviderIndex = ref(-1)
+const deleteProviderName = ref('')
 // 单一数据源：表格始终绑定此数组，拖拽/编辑都直接操作它
 const localProviders = ref([])
 // 记录进入排序模式时的快照，用于退出时比对是否有变化
@@ -112,7 +119,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', checkMobile)
 })
 
-const configValue = computed(() => props.config || { enabled: false, show_sidebar_nav: true, max_failures: 3, providers: [] })
+const configValue = computed(() => props.config || { enabled: false, show_sidebar_nav: true, max_failures: 3, max_retries: 2, providers: [] })
 const providers = computed(() => (Array.isArray(configValue.value.providers) ? configValue.value.providers : []))
 const displayProviderRows = computed(() => (
   props.providerRows.length ? props.providerRows : buildProviderRows(providers.value)
@@ -133,9 +140,20 @@ watch(providers, (next) => {
   localProviders.value = next.map(p => ({ ...p }))
 }, { immediate: true })
 
+// 切换离开厂商 Tab 时清理未填写数据的临时新增行
+// 使用 flush: 'post' 确保 DOM 更新完成后执行，避免 VWindow 过渡动画期间 ref 不可用
+watch(activeTab, async (newTab, oldTab) => {
+  if (oldTab === 'vendors' && newTab !== 'vendors') {
+    await nextTick()
+    if (vendorRef.value?.cleanupEmptyVendors) {
+      vendorRef.value.cleanupEmptyVendors()
+    }
+  }
+}, { flush: 'post' })
+
 function showTestFeedback(type, message) {
   testFeedback.value = { type, message, show: true }
-  setTimeout(() => { testFeedback.value.show = false }, 3000)
+  setTimeout(() => { testFeedback.value.show = false }, 5000)
 }
 
 // 重置弹窗表单为默认值，关闭弹窗。
@@ -153,7 +171,9 @@ function addProvider() {
 }
 
 // 打开编辑供应商弹窗。
-function editProvider(index) {
+function editProvider(providerId) {
+  const index = localProviders.value.findIndex(p => p.id === providerId)
+  if (index < 0) return
   editedProvider.value = { ...localProviders.value[index] }
   editorIndex.value = index
   showEditor.value = true
@@ -175,7 +195,7 @@ function commitProvider() {
   emit('auto-save')
 }
 
-// 导出配置：将当前配置（enabled, show_sidebar_nav, max_failures, providers）和厂商列表导出为 JSON 文件。
+// 导出配置：将当前配置（enabled, show_sidebar_nav, max_failures, max_retries, providers）和厂商列表导出为 JSON 文件。
 function handleExport() {
   const exportData = {
     version: 'agenttokenspro-export-v2',
@@ -184,6 +204,7 @@ function handleExport() {
       enabled: Boolean(configValue.value.enabled),
       show_sidebar_nav: Boolean(configValue.value.show_sidebar_nav),
       max_failures: Number(configValue.value.max_failures) || 3,
+      max_retries: Number(configValue.value.max_retries) ?? 2,
       providers: (configValue.value.providers || []).map(p => ({ ...p })),
     },
     vendors: (props.vendors || []).map(v => ({ ...v })),
@@ -278,16 +299,33 @@ async function handleImportFile(event) {
   reader.readAsText(file)
 }
 
-// 从配置列表中移除一个供应商。
-function removeProvider(index) {
+// 从配置列表中移除一个供应商（弹出二次确认）。
+function removeProvider(providerId) {
+  const index = localProviders.value.findIndex(p => p.id === providerId)
+  if (index < 0) return
+  const provider = localProviders.value[index]
+  deleteProviderIndex.value = index
+  deleteProviderName.value = provider?.name || '未命名'
+  showDeleteProviderConfirm.value = true
+}
+
+// 确认删除供应商
+function confirmDeleteProvider() {
+  const index = deleteProviderIndex.value
+  if (index < 0) return
   const nextProviders = [...localProviders.value]
   nextProviders.splice(index, 1)
   configValue.value.providers = nextProviders
+  showDeleteProviderConfirm.value = false
+  deleteProviderIndex.value = -1
+  deleteProviderName.value = ''
   emit('auto-save')
 }
 
 // 切换供应商启用状态并自动保存。
-function toggleProvider(index) {
+function toggleProvider(providerId) {
+  const index = localProviders.value.findIndex(p => p.id === providerId)
+  if (index < 0) return
   const provider = localProviders.value[index]
   if (!provider) return
   provider.enabled = !provider.enabled
@@ -403,20 +441,6 @@ async function openVendorEditFromOverview(row) {
 
     <VAlert v-if="error" type="error" variant="tonal" class="mb-4">{{ error }}</VAlert>
 
-    <VSlideYTransition>
-      <VAlert
-        v-if="testFeedback.show"
-        :type="testFeedback.type"
-        variant="tonal"
-        density="compact"
-        class="mb-3"
-        closable
-        @click:close="testFeedback.show = false"
-      >
-        {{ testFeedback.message }}
-      </VAlert>
-    </VSlideYTransition>
-
     <VSheet border rounded class="agenttokens-control-panel">
       <!-- 第一行：开关区 -->
       <div class="agenttokens-control-panel__row">
@@ -479,6 +503,20 @@ async function openVendorEditFromOverview(row) {
         </div>
       </VSheet>
     </div>
+
+    <VSlideYTransition>
+      <VAlert
+        v-if="testFeedback.show"
+        :type="testFeedback.type"
+        variant="tonal"
+        density="compact"
+        class="my-2"
+        closable
+        @click:close="testFeedback.show = false"
+      >
+        {{ testFeedback.message }}
+      </VAlert>
+    </VSlideYTransition>
 
     <VSheet border rounded class="agenttokens-content-panel">
       <!-- 移动端：纯静态 Flex 导航条，彻底脱离 Vuetify 滑动引擎 -->
@@ -613,9 +651,12 @@ async function openVendorEditFromOverview(row) {
             :provider-rows="displayProviderRows"
             :active-provider-id="activeProviderId"
             :failed-provider-ids="failedProviderIds"
+            :max-failures="configValue.max_failures || 3"
             @reset="resetUsage"
             @select="selectProvider"
             @open-vendor-edit="openVendorEditFromOverview"
+            @test="payload => emit('test-provider', payload)"
+            @reset-failures="providerId => emit('reset-failures', providerId)"
           />
         </VWindowItem>
 
@@ -626,12 +667,14 @@ async function openVendorEditFromOverview(row) {
             :active-provider-id="activeProviderId"
             :failed-provider-ids="failedProviderIds"
             :drag-mode="dragMode"
+            :max-failures="configValue.max_failures || 3"
             show-credentials
             @edit="editProvider"
             @remove="removeProvider"
             @select="selectProvider"
             @toggle="toggleProvider"
             @reorder="reorderProvider"
+            @reset-failures="providerId => emit('reset-failures', providerId)"
           />
         </VWindowItem>
 
@@ -642,6 +685,7 @@ async function openVendorEditFromOverview(row) {
             :api="props.api"
             :plugin-base="props.pluginBase"
             :loading="loading"
+            :visible="activeTab === 'vendors'"
             @refresh="emit('refresh')"
             @drag-mode-change="vendorDragMode = $event"
           />
@@ -658,9 +702,24 @@ async function openVendorEditFromOverview(row) {
       :vendors="props.vendors"
       @after-leave="resetForm"
       @commit="commitProvider"
+      @delete="removeProvider"
       @query-models="payload => emit('query-models', payload)"
       @test-connection="payload => emit('test-connection', payload)"
     />
+
+    <!-- 供应商删除确认弹窗 -->
+    <VDialog v-model="showDeleteProviderConfirm" max-width="420" persistent>
+      <VCard>
+        <VCardTitle class="text-subtitle-1">确认删除</VCardTitle>
+        <VCardText>
+          确定要删除供应商「<strong>{{ deleteProviderName }}</strong>」吗？此操作不可撤销。
+        </VCardText>
+        <VCardActions class="d-flex justify-end ga-2">
+          <VBtn variant="text" @click="showDeleteProviderConfirm = false">取消</VBtn>
+          <VBtn color="error" @click="confirmDeleteProvider">删除</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
   </div>
 </template>
 
@@ -798,7 +857,47 @@ async function openVendorEditFromOverview(row) {
 }
 
 .agenttokens-content-panel {
-  overflow: hidden;
+  overflow: visible;
+  max-width: none !important;
+  width: 100% !important;
+}
+
+/* 强制消除 Vuetify 卡片及容器宽度与边距限制 */
+:deep(.v-sheet),
+:deep(.v-card),
+:deep(.v-card__text),
+:deep(.v-card__body) {
+  width: 100% !important;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* VWindow / VWindowItem 全链路宽度穿透 */
+:deep(.v-window),
+:deep(.v-window__container) {
+  width: 100% !important;
+  max-width: none !important;
+  overflow: visible !important;
+}
+
+:deep(.v-window-item) {
+  width: 100% !important;
+  max-width: none !important;
+  overflow: visible !important;
+  flex: 1 1 100% !important;
+}
+
+:deep(.v-window-item > *) {
+  width: 100% !important;
+  max-width: 100% !important;
+  flex: 1 1 auto !important;
+}
+
+/* 确保表格横向完全铺满 */
+:deep(.v-table),
+:deep(table) {
+  width: 100% !important;
 }
 
 .agenttokens-tabs-row {
@@ -818,22 +917,14 @@ async function openVendorEditFromOverview(row) {
 .agenttokens-table-actions {
   display: flex;
   justify-content: flex-end;
-  flex-wrap: nowrap;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 8px;
   flex: 0 0 auto;
   min-width: 0;
 }
 
 .agenttokens-window {
-  padding: 12px;
-}
-
-.agenttokens-table-actions {
-  display: flex;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 8px;
-  flex: 0 0 auto;
+  padding: 0;
 }
 
 .center-input :deep(input) {

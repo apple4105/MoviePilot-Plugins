@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted, nextTick } from 'vue'
 
 const props = defineProps({
   vendors: {
@@ -18,6 +18,10 @@ const props = defineProps({
     type: String,
     default: 'plugin/AgentTokensPro',
   },
+  visible: {
+    type: Boolean,
+    default: true,
+  },
 })
 
 const emit = defineEmits(['refresh', 'error', 'drag-mode-change'])
@@ -33,6 +37,10 @@ const saving = ref(false)
 const feedback = ref({ type: '', message: '', show: false })
 // 标记是否有本地未保存的变更（新增/编辑中），防止 watcher 覆盖
 const hasLocalChanges = ref(false)
+// 删除确认弹窗
+const showDeleteConfirm = ref(false)
+const deleteVendorId = ref(null)
+const deleteVendorName = ref('')
 
 // 同步 props.vendors 到 localVendors（仅在无本地变更时同步）
 watch(() => props.vendors, (next) => {
@@ -44,6 +52,13 @@ watch(() => props.vendors, (next) => {
   if (nextStr === curStr) return
   localVendors.value = next.map(v => ({ ...v }))
 }, { immediate: true })
+
+// 当组件不可见时（切换到其他 tab），清理未填写数据的临时新增行
+watch(() => props.visible, (visible) => {
+  if (!visible) {
+    cleanupEmptyVendors()
+  }
+})
 
 const displayVendors = computed(() => {
   return [...localVendors.value].sort((a, b) => {
@@ -95,6 +110,37 @@ function cancelEdit() {
   hasLocalChanges.value = false
 }
 
+// 清理未填写数据的临时新增行（切换 tab 时由父组件调用）
+function cleanupEmptyVendors() {
+  // 切换 tab 前，将编辑缓冲区同步回本地列表，保留用户已输入的内容
+  if (editingId.value && editBuffer.value.id) {
+    localVendors.value = localVendors.value.map(v =>
+      v.id === editingId.value ? { ...v, ...editBuffer.value } : v
+    )
+  }
+
+  const hadTemp = localVendors.value.some(v => String(v.id).startsWith('temp_'))
+  if (!hadTemp) return
+
+  localVendors.value = localVendors.value.filter(v => {
+    if (!String(v.id).startsWith('temp_')) return true
+    // 保留已填写名称或 URL 的临时行
+    return v.name?.trim() || v.url?.trim()
+  })
+
+  // 如果正在编辑的行被移除，取消编辑状态
+  if (editingId.value && !localVendors.value.find(v => v.id === editingId.value)) {
+    editingId.value = null
+    editBuffer.value = {}
+  }
+
+  // 没有临时行残留时清除本地变更标记，允许 watcher 恢复同步
+  const hasRemainingTemp = localVendors.value.some(v => String(v.id).startsWith('temp_'))
+  if (!hasRemainingTemp) {
+    hasLocalChanges.value = false
+  }
+}
+
 async function saveEdit() {
   if (!editBuffer.value.name?.trim()) {
     showFeedback('error', '厂商名称不能为空')
@@ -122,13 +168,21 @@ async function saveEdit() {
   }
 }
 
-async function removeVendor(vendor) {
-  if (!confirm(`确定删除厂商「${vendor.name}」？`)) return
+function requestDeleteVendor(vendor) {
+  deleteVendorId.value = vendor.id
+  deleteVendorName.value = vendor.name || '未命名'
+  showDeleteConfirm.value = true
+}
+
+async function confirmDeleteVendor() {
+  const id = deleteVendorId.value
+  showDeleteConfirm.value = false
+  if (!id) return
   saving.value = true
   try {
-    const response = await props.api.post(`${props.pluginBase}/vendors/delete`, { id: vendor.id })
+    const response = await props.api.post(`${props.pluginBase}/vendors/delete`, { id })
     if (response?.success) {
-      localVendors.value = response.data.vendors || localVendors.value.filter(v => v.id !== vendor.id)
+      localVendors.value = response.data.vendors || localVendors.value.filter(v => v.id !== id)
       showFeedback('success', '删除成功')
     } else {
       showFeedback('error', response?.message || '删除失败')
@@ -137,6 +191,8 @@ async function removeVendor(vendor) {
     showFeedback('error', `删除失败: ${err.message}`)
   } finally {
     saving.value = false
+    deleteVendorId.value = null
+    deleteVendorName.value = ''
   }
 }
 
@@ -241,7 +297,9 @@ function rowClasses(index) {
 defineExpose({
   addVendor,
   toggleDragMode,
+  cleanupEmptyVendors,
 })
+
 </script>
 
 <template>
@@ -323,7 +381,7 @@ defineExpose({
                 </template>
                 <template v-else>
                   <VBtn icon="mdi-pencil" size="small" variant="text" @click="startEdit(vendor)" />
-                  <VBtn icon="mdi-delete" size="small" variant="text" color="error" @click="removeVendor(vendor)" />
+                  <VBtn icon="mdi-delete" size="small" variant="text" color="error" @click="requestDeleteVendor(vendor)" />
                 </template>
               </td>
             </tr>
@@ -336,6 +394,20 @@ defineExpose({
         </VTable>
       </div>
     </VSheet>
+
+    <!-- 厂商删除确认弹窗 -->
+    <VDialog v-model="showDeleteConfirm" max-width="420" persistent>
+      <VCard>
+        <VCardTitle class="text-subtitle-1">确认删除</VCardTitle>
+        <VCardText>
+          确定要删除厂商「<strong>{{ deleteVendorName }}</strong>」吗？此操作不可撤销。
+        </VCardText>
+        <VCardActions class="d-flex justify-end ga-2">
+          <VBtn variant="text" @click="showDeleteConfirm = false">取消</VBtn>
+          <VBtn color="error" @click="confirmDeleteVendor">删除</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
   </div>
 </template>
 
@@ -344,10 +416,36 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: 12px;
+  width: 100% !important;
+  max-width: 100% !important;
 }
 
 .vendor-table-shell {
   overflow-x: auto;
+  max-width: 100% !important;
+  width: 100% !important;
+  padding: 0 !important;
+}
+
+/* 强制消除 Vuetify 卡片及容器宽度与边距限制 */
+:deep(.v-card),
+:deep(.v-card__text),
+:deep(.v-card__body),
+:deep(.v-table__wrapper),
+:deep(.v-data-table),
+:deep(.v-data-table__wrapper) {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* 确保表格横向完全铺满 */
+:deep(.v-table),
+:deep(.v-data-table > .v-table__wrapper > table),
+:deep(table) {
+  width: 100% !important;
+  max-width: 100% !important;
 }
 
 .vendor-table-scroll {
@@ -361,10 +459,11 @@ defineExpose({
   -webkit-overflow-scrolling: touch;
 }
 
-/* 强行撑开表格真实宽度 */
+/* 表格撑满容器宽度 */
 .vendor-table-scroll :deep(table) {
-  min-width: 700px !important;
-  width: max-content !important;
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
   table-layout: auto !important;
 }
 
@@ -397,8 +496,8 @@ defineExpose({
 }
 
 .vendor-table-scroll :deep(.enable-col) {
-  width: 48px;
-  min-width: 48px;
+  width: 60px;
+  min-width: 60px;
   text-align: center !important;
 }
 
@@ -431,14 +530,24 @@ defineExpose({
 }
 
 .vendor-table-scroll :deep(.name-col) {
-  min-width: 130px !important;
+  min-width: 260px;
+  width: 45%;
   white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 
-/* API 地址列：URL 自然截断，把空间留给右侧操作图标 */
+/* 名称列编辑态：VTextField 撑满列宽 */
+.vendor-table-scroll :deep(.name-col .v-text-field),
+.vendor-table-scroll :deep(.url-col .v-text-field) {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* API 地址列：自动填充剩余空间，但限制最大宽度 */
 .vendor-table-scroll :deep(.url-col) {
-  min-width: 260px !important;
-  max-width: 300px !important;
+  width: auto !important;
+  max-width: 35% !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
@@ -446,8 +555,8 @@ defineExpose({
 
 /* 操作列：固定宽度，图标完整显示不截断，flex 布局 */
 .vendor-table-scroll :deep(.action-col) {
-  min-width: 90px !important;
-  width: 90px !important;
+  width: 100px;
+  min-width: 100px !important;
   text-overflow: clip !important;
   display: flex !important;
   align-items: center !important;
@@ -493,7 +602,7 @@ defineExpose({
   }
 
   .vendor-table-scroll :deep(.name-col) {
-    min-width: 100px !important;
+    min-width: 140px !important;
   }
 
   .vendor-table-scroll :deep(.url-col) {
