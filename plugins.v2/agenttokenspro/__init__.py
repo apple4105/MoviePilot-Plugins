@@ -30,7 +30,7 @@ class AgentTokensPro(_PluginBase):
     """
 
     plugin_name = "Agent Tokens Pro"
-    plugin_desc = "管理多平台免费 Token 配额，按优先级自动切换 Agent LLM 供应商。"
+    plugin_desc = "管理多平台 Token 配额，按优先级自动切换 Agent LLM 供应商。"
     plugin_icon = "agentresourceofficer.png"
     plugin_version = "0.0.6"
     plugin_author = "apple4105"

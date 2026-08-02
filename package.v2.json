@@ -1,7 +1,7 @@
 {
   "AgentTokensPro": {
     "name": "Agent Tokens Pro",
-    "description": "管理多平台免费 Token 配额，按优先级自动切换 Agent LLM 供应商。增强版：失败自动切换通知、两阶段连通性测试、硬故障踢出、厂商管理、Dashboard 故障高亮。",
+    "description": "管理多平台 Token 配额，按优先级自动切换 Agent LLM 供应商。增强版：失败自动切换通知、两阶段连通性测试、硬故障踢出、厂商管理、Dashboard 故障高亮。",
     "labels": "Agent,AI,系统,Token",
     "version": "0.0.6",
     "icon": "agentresourceofficer.png",
