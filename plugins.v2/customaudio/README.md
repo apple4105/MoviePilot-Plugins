@@ -1,69 +1,55 @@
-# CustomAudio · 语音识别与合成
+# MoviePilot CustomAudio Plugin
 
-为 MoviePilot Agent 提供语音识别 (ASR) 和语音合成 (TTS) 能力，兼容 OpenAI 接口格式。
+语音识别 (ASR) 与语音合成 (TTS) 插件，为 MoviePilot Agent 提供语音交互能力。
 
-## 功能
+## 功能特性
 
-- 注册名为 `custom` 的音频 provider，所有配置在插件表单内完成，不依赖系统设置中的音频参数
-- 启用后自动将系统音频输入/输出 provider 切换为 `custom`，关闭后自动恢复原始 provider
-- **ASR (语音转文字)**：multipart POST，兼容 OpenAI Whisper 接口格式
-- **TTS (文字转语音)**：JSON POST，兼容 OpenAI TTS 接口格式，响应为二进制音频
-- 前端表单强校验：ASR/TTS 启用时必填项非空检查
-- 语音回复附带文字开关，联动 `AUDIO_OUTPUT_INCLUDE_TEXT` 系统配置
+- **语音识别 (ASR)**：支持 OpenAI Whisper API 兼容接口
+- **语音合成 (TTS)**：支持 OpenAI TTS API 兼容接口
+- **多语言支持**：中文、英语、日语、韩语、法语、德语、西班牙语、俄语
+- **连接测试**：一键测试 ASR/TTS API 连通性
+- **Base64 自动解码**：API Key 输入框支持粘贴 Base64 编码自动解码
+- **语音回复附带文字**：开启后 Telegram 等渠道同时发送文字消息
 
 ## 配置说明
 
-### ASR (语音识别)
+| 配置项 | 说明 |
+|--------|------|
+| 启用 | 总开关 |
+| 启用语音识别 (ASR) | 开启 ASR 功能 |
+| ASR API 地址 | 兼容 OpenAI 格式的 ASR 接口地址 |
+| ASR 模型 | 如 `whisper-1` |
+| ASR API Key | ASR 服务的 API Key |
+| 识别语言 | 中文/英语/日语/韩语/法语/德语/西班牙语/俄语 |
+| 启用语音合成 (TTS) | 开启 TTS 功能 |
+| TTS API 地址 | 兼容 OpenAI 格式的 TTS 接口地址 |
+| TTS 模型 | 如 `tts-1` |
+| TTS API Key | TTS 服务的 API Key |
+| 语音音色 | 音色名称，由供应商定义 |
+| 语音回复附带文字 | 开启后同时发送文字消息 |
 
-| 字段 | 说明 | 示例 |
-|------|------|------|
-| API Key | ASR 服务的 API 密钥 | `sk-xxxx` |
-| Base URL | ASR 服务地址 | `https://api.stepfun.com/v1` |
-| Model | 识别模型名称 | `step-asr` |
-| Language | 语言代码 | `zh` |
+## 更新日志
 
-### TTS (语音合成)
+### v1.3 (2026-08-02)
+- **新增**：API Key 输入框支持 Base64 自动解码（粘贴/失焦时自动检测并解码）
+- **优化**：页面首次加载时静默加载配置，不再显示"配置已重新加载"提示
+- **优化**：嵌套 Base64 最多解码 3 层
 
-| 字段 | 说明 | 示例 |
-|------|------|------|
-| API Key | TTS 服务的 API 密钥 | `sk-xxxx` |
-| Base URL | TTS 服务地址 | `https://api.stepfun.com/v1` |
-| Model | 合成模型名称 | `step-tts` |
-| Voice | 音色名称 | `yunxi` |
+### v1.2 (2026-08-01)
+- **修复**：Telegram 渠道秒级静默期 + 10s 超时窗口
+- **修复**：录音检测灵敏度优化（200ms 静音/150ms 最小时长/100ms 等待）
+- **修复**：音频截断问题（min_silence_duration=300ms/500ms）
 
-## StepFun 配置指引
+### v1.1 (2026-08-01)
+- **新增**：TTS Provider 智能切换（配额耗尽自动切换）
+- **优化**：移除 _build_openai_tts_payload 中的 response_format
 
-以 [StepFun](https://www.stepfun.com/) 为例：
+### v1.0 (2026-08-01)
+- 初始版本
+- 支持 ASR (Whisper API) 和 TTS (OpenAI TTS API)
+- 支持 Telegram/Discord 语音识别
+- 支持语音回复附带文字
 
-1. 在 StepFun 开放平台获取 API Key
-2. ASR 配置：
-   - **Base URL**：`https://api.stepfun.com/v1`
-   - **Model**：`step-asr`
-   - **Language**：`zh`
-3. TTS 配置：
-   - **Base URL**：`https://api.stepfun.com/v1`
-   - **Model**：`step-tts`
-   - **Voice**：根据 StepFun 文档选择音色（如 `yunxi`）
-4. 点击「测试连接」验证 ASR 和 TTS 连通性
-5. 保存配置并启用插件
+## 许可证
 
-> StepFun 的 ASR/TTS 接口兼容 OpenAI 格式，Base URL 需包含 `/v1` 路径。
-
-## 版本历史
-
-| 版本 | 更新内容 |
-|------|----------|
-| v1.0 | 初始版本，支持 OpenAI 兼容的 ASR/TTS 接口 |
-| v1.1 | 新增语音回复附带文字开关，联动 `AUDIO_OUTPUT_INCLUDE_TEXT` 系统配置 |
-| v1.2 | 新增前端表单强校验（ASR/TTS 启用时必填项非空检查） |
-
-## 技术细节
-
-- 插件等级：Level 2
-- 插件类型：V2 插件（Vue Module Federation）
-- 前端框架：Vue 3 + Vuetify 3
-- 构建工具：Vite 5
-
-## License
-
-GPL-3.0
+MIT License
