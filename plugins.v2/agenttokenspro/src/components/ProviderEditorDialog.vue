@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { normalizeModelOptions, PROVIDER_TYPE_OPTIONS } from '../provider'
 
 const props = defineProps({
@@ -47,11 +47,18 @@ const dialogVisible = computed({
 
 const isEdit = computed(() => props.editorIndex >= 0)
 
-// 提取纯 URL：若输入包含 " - " 格式，提取后半段的 http/https 地址
+// 提取纯 URL：若输入包含对象或 " - " 格式，提取纯 http/https 地址
 function extractPureUrl(input) {
-  if (!input || typeof input !== 'string') return input
-  const trimmed = input.trim()
-  // 检查是否包含 " - " 格式（厂商名称 - API地址）
+  if (!input) return ''
+  // 1. 如果 VCombobox 返回的是对象，优先提取 value 或 title
+  let rawStr = input
+  if (typeof input === 'object') {
+    rawStr = input.value || input.title || input.name || ''
+  }
+  if (typeof rawStr !== 'string') return ''
+
+  const trimmed = rawStr.trim()
+  // 2. 检查是否包含 " - " 格式（厂商名称 - API地址）
   const separatorIndex = trimmed.indexOf(' - ')
   if (separatorIndex > 0) {
     const possibleUrl = trimmed.slice(separatorIndex + 3).trim()
@@ -59,16 +66,13 @@ function extractPureUrl(input) {
       return possibleUrl
     }
   }
-  // 直接返回纯 URL
+  // 3. 直接返回纯 URL
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return trimmed
   }
-  // 尝试从字符串中提取 URL
+  // 4. 正则匹配 URL
   const urlMatch = trimmed.match(/https?:\/\/[^\s]+/)
-  if (urlMatch) {
-    return urlMatch[0]
-  }
-  return trimmed
+  return urlMatch ? urlMatch[0] : trimmed
 }
 
 // 厂商 API 地址列表，用于下拉选择（仅展示已启用的厂商）
@@ -121,13 +125,20 @@ const testButtonColor = computed(() => {
   return 'primary'
 })
 
+// 初始化标志位：防止编辑弹窗打开时 base_url watcher 误触发名称覆盖
+const isInitializing = ref(false)
+
 watch(dialogVisible, (val) => {
   if (val) {
+    isInitializing.value = true
     showApiKey.value = false
     modelError.value = ''
     testResult.value = null
     connectionTestState.value = null
     modelOptions.value = []
+    nextTick(() => {
+      isInitializing.value = false
+    })
   }
 })
 
@@ -143,7 +154,7 @@ watch(testResult, (val) => {
 watch(
   () => props.provider.base_url,
   (newUrl) => {
-    if (!newUrl) return
+    if (!newUrl || isInitializing.value) return
     const cleanUrl = extractPureUrl(newUrl)
     const matchedVendor = props.vendors.find(v => v.url === cleanUrl)
     if (matchedVendor && matchedVendor.name) {
@@ -190,6 +201,14 @@ async function testConnection() {
       props.provider.api_key = decoded
       showClipboard('API Key 已自动从 Base64 解码', 'info')
     }
+  }
+
+  // 规范化模型字段：VCombobox 可能返回对象，确保传给后端的是字符串
+  const _model = props.provider.model
+  if (_model && typeof _model === 'object') {
+    props.provider.model = _model.value || _model.name || _model.label || _model.title || ''
+  } else if (typeof _model !== 'string') {
+    props.provider.model = _model != null ? String(_model) : ''
   }
 
   // 若模型为空，自动触发模型刷新
@@ -415,11 +434,17 @@ async function queryModels() {
       testResult.value = { success: false, message: '获取模型列表失败：未获取到模型' }
     } else if (modelOptions.value.length === 1) {
       // 只有一个模型时自动选中
-      props.provider.model = modelOptions.value[0].value
+      // ✅ 安全提取模型值，防止 .value 变成 undefined 或 [object Object]
+      const firstOpt = modelOptions.value[0]
+      const firstVal = typeof firstOpt === 'object' ? (firstOpt.value || firstOpt.title || firstOpt) : firstOpt
+      props.provider.model = typeof firstVal === 'string' ? firstVal : String(firstVal || '')
       testResult.value = { success: true, message: `获取模型列表成功，共 ${modelOptions.value.length} 个模型` }
     } else {
       // 多个模型时默认选中第一个
-      props.provider.model = modelOptions.value[0].value
+      // ✅ 安全提取模型值，防止 .value 变成 undefined 或 [object Object]
+      const firstOpt = modelOptions.value[0]
+      const firstVal = typeof firstOpt === 'object' ? (firstOpt.value || firstOpt.title || firstOpt) : firstOpt
+      props.provider.model = typeof firstVal === 'string' ? firstVal : String(firstVal || '')
       testResult.value = { success: true, message: `获取模型列表成功，共 ${modelOptions.value.length} 个模型` }
     }
   } catch (err) {
@@ -518,6 +543,9 @@ async function queryModels() {
             <VCombobox
               v-model="provider.model"
               :items="modelOptions"
+              item-title="title"
+              item-value="value"
+              :return-object="false"
               :loading="loadingModels"
               :error-messages="modelError"
               variant="outlined"

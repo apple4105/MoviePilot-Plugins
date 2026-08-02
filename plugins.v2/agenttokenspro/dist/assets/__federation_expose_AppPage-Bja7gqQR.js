@@ -1,8 +1,8 @@
 import { importShared } from './__federation_fn_import-JrT3xvdd.js';
-import { A as AgentTokensManager } from './AgentTokensManager-CgH0hXfe.js';
+import { A as AgentTokensManager } from './AgentTokensManager-B3V6_fLA.js';
 import { _ as _export_sfc, u as unwrapResponse } from './_plugin-vue_export-helper-MUdERlsH.js';
 
-const {createVNode:_createVNode,openBlock:_openBlock,createElementBlock:_createElementBlock} = await importShared('vue');
+const {createVNode:_createVNode,createTextVNode:_createTextVNode,resolveComponent:_resolveComponent,withCtx:_withCtx,toDisplayString:_toDisplayString,openBlock:_openBlock,createElementBlock:_createElementBlock} = await importShared('vue');
 
 
 const _hoisted_1 = { class: "agenttokens-app-container" };
@@ -44,6 +44,8 @@ const status = ref({
   summary: {},
   active_provider_id: null,
 });
+const showRefreshConfirm = ref(false);
+const refreshToast = ref({ show: false, message: '', color: 'success' });
 
 // 构造 API 基础路径。
 const pluginBase = computed(() => `plugin/${props.pluginId || 'AgentTokensPro'}`);
@@ -87,6 +89,30 @@ async function loadStatus() {
     error.value = err?.message || '加载失败';
   } finally {
     loading.value = false;
+  }
+}
+
+// 手动刷新：若检测到未保存更改，先弹确认弹窗。
+function handleRefresh() {
+  if (configDirty.value) {
+    showRefreshConfirm.value = true;
+    return
+  }
+  doRefresh();
+}
+
+// 确认弹窗"确定"回调：丢弃未保存更改，强制拉取。
+function confirmRefresh() {
+  showRefreshConfirm.value = false;
+  configDirty.value = false;
+  doRefresh();
+}
+
+// 实际执行刷新并展示 Toast。
+async function doRefresh() {
+  await loadStatus();
+  if (!error.value) {
+    refreshToast.value = { show: true, message: '配置已重新加载', color: 'success' };
   }
 }
 
@@ -363,6 +389,14 @@ onUnmounted(() => {
 });
 
 return (_ctx, _cache) => {
+  const _component_VCardTitle = _resolveComponent("VCardTitle");
+  const _component_VCardText = _resolveComponent("VCardText");
+  const _component_VBtn = _resolveComponent("VBtn");
+  const _component_VCardActions = _resolveComponent("VCardActions");
+  const _component_VCard = _resolveComponent("VCard");
+  const _component_VDialog = _resolveComponent("VDialog");
+  const _component_VSnackbar = _resolveComponent("VSnackbar");
+
   return (_openBlock(), _createElementBlock("div", _hoisted_1, [
     _createVNode(AgentTokensManager, {
       ref_key: "managerRef",
@@ -378,7 +412,7 @@ return (_ctx, _cache) => {
       loading: loading.value,
       saving: saving.value,
       "hide-title": __props.hideTitle,
-      onRefresh: loadStatus,
+      onRefresh: handleRefresh,
       onSave: saveConfig,
       onAutoSave: autoSave,
       onResetUsage: resetUsage,
@@ -388,12 +422,74 @@ return (_ctx, _cache) => {
       onTestConnection: testConnection,
       onSelectProvider: selectProvider,
       onTestProvider: testProvider
-    }, null, 8, ["config", "provider-rows", "summary", "active-provider-id", "vendors", "api", "plugin-base", "error", "loading", "saving", "hide-title"])
+    }, null, 8, ["config", "provider-rows", "summary", "active-provider-id", "vendors", "api", "plugin-base", "error", "loading", "saving", "hide-title"]),
+    _createVNode(_component_VDialog, {
+      modelValue: showRefreshConfirm.value,
+      "onUpdate:modelValue": _cache[1] || (_cache[1] = $event => ((showRefreshConfirm).value = $event)),
+      "max-width": "420",
+      persistent: ""
+    }, {
+      default: _withCtx(() => [
+        _createVNode(_component_VCard, null, {
+          default: _withCtx(() => [
+            _createVNode(_component_VCardTitle, { class: "text-subtitle-1" }, {
+              default: _withCtx(() => [...(_cache[3] || (_cache[3] = [
+                _createTextVNode("确认刷新", -1)
+              ]))]),
+              _: 1
+            }),
+            _createVNode(_component_VCardText, null, {
+              default: _withCtx(() => [...(_cache[4] || (_cache[4] = [
+                _createTextVNode(" 检测到未保存的更改，刷新将丢弃当前修改，是否继续？ ", -1)
+              ]))]),
+              _: 1
+            }),
+            _createVNode(_component_VCardActions, { class: "d-flex justify-end ga-2" }, {
+              default: _withCtx(() => [
+                _createVNode(_component_VBtn, {
+                  variant: "text",
+                  onClick: _cache[0] || (_cache[0] = $event => (showRefreshConfirm.value = false))
+                }, {
+                  default: _withCtx(() => [...(_cache[5] || (_cache[5] = [
+                    _createTextVNode("取消", -1)
+                  ]))]),
+                  _: 1
+                }),
+                _createVNode(_component_VBtn, {
+                  color: "primary",
+                  onClick: confirmRefresh
+                }, {
+                  default: _withCtx(() => [...(_cache[6] || (_cache[6] = [
+                    _createTextVNode("确定", -1)
+                  ]))]),
+                  _: 1
+                })
+              ]),
+              _: 1
+            })
+          ]),
+          _: 1
+        })
+      ]),
+      _: 1
+    }, 8, ["modelValue"]),
+    _createVNode(_component_VSnackbar, {
+      modelValue: refreshToast.value.show,
+      "onUpdate:modelValue": _cache[2] || (_cache[2] = $event => ((refreshToast.value.show) = $event)),
+      color: refreshToast.value.color,
+      timeout: "2500",
+      location: "bottom"
+    }, {
+      default: _withCtx(() => [
+        _createTextVNode(_toDisplayString(refreshToast.value.message), 1)
+      ]),
+      _: 1
+    }, 8, ["modelValue", "color"])
   ]))
 }
 }
 
 };
-const AppPage = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-244ad0ae"]]);
+const AppPage = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-041d37af"]]);
 
 export { AppPage as default };

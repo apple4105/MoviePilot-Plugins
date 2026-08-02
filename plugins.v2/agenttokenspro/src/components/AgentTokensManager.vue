@@ -174,7 +174,7 @@ function addProvider() {
 function editProvider(providerId) {
   const index = localProviders.value.findIndex(p => p.id === providerId)
   if (index < 0) return
-  editedProvider.value = { ...localProviders.value[index] }
+  editedProvider.value = JSON.parse(JSON.stringify(localProviders.value[index]))
   editorIndex.value = index
   showEditor.value = true
 }
@@ -237,6 +237,9 @@ async function handleImportFile(event) {
   if (!file) return
 
   const reader = new FileReader()
+  reader.onerror = () => {
+    alert('导入失败：文件读取错误，请检查文件权限或重新选择文件')
+  }
   reader.onload = async (e) => {
     try {
       const data = JSON.parse(e.target?.result)
@@ -247,7 +250,6 @@ async function handleImportFile(event) {
         return
       }
       const importVendors = Array.isArray(data?.vendors) ? data.vendors : []
-      const totalCount = importConfig.providers.length + importVendors.length
       // 确认覆盖
       const ok = confirm(
         `即将导入 ${importConfig.providers.length} 个供应商和 ${importVendors.length} 个厂商配置，这将覆盖当前所有配置。\n\n确定要继续吗？`,
@@ -255,12 +257,12 @@ async function handleImportFile(event) {
       if (!ok) return
 
       // 写入配置（providers + 基础设置）
-      configValue.value = {
-        enabled: Boolean(importConfig.enabled ?? configValue.value.enabled),
-        show_sidebar_nav: Boolean(importConfig.show_sidebar_nav ?? configValue.value.show_sidebar_nav),
-        max_failures: Number(importConfig.max_failures) || 3,
-        providers: importConfig.providers.map((p, idx) => normalizeProvider(p, idx + 1)),
-      }
+      // 注意：configValue 是只读 computed，必须逐属性 mutate 而非整体赋值
+      configValue.value.enabled = Boolean(importConfig.enabled ?? configValue.value.enabled)
+      configValue.value.show_sidebar_nav = Boolean(importConfig.show_sidebar_nav ?? configValue.value.show_sidebar_nav)
+      configValue.value.max_failures = Number(importConfig.max_failures) || 3
+      configValue.value.max_retries = Number(importConfig.max_retries) ?? 2
+      configValue.value.providers = importConfig.providers.map((p, idx) => normalizeProvider(p, idx + 1))
       localProviders.value = [...configValue.value.providers]
       emit('auto-save')
 
@@ -284,7 +286,6 @@ async function handleImportFile(event) {
             await props.api.post(`${props.pluginBase}/vendors`, vendorData)
           }
         } catch (vendorErr) {
-          console.warn('厂商数据导入失败:', vendorErr)
           alert('供应商配置已导入，但厂商数据导入失败，请手动检查厂商页。')
         }
       }
@@ -408,23 +409,20 @@ function toggleVendorDragMode() {
   vendorRef.value?.toggleDragMode()
 }
 
-// 从总览页点击名称跳转到供应商 Tab 并打开编辑弹窗
-async function openVendorEditFromOverview(row) {
+// 从总览页点击名称直接打开编辑弹窗（不切换 Tab）
+function openVendorEditFromOverview(row) {
   if (!row || !row.id) {
     showTestFeedback('error', '供应商数据异常，无法编辑')
     return
   }
-  // 切换到供应商 Tab
-  activeTab.value = 'config'
-  // 等待 Tab 切换完成后再打开弹窗
-  await nextTick()
-  // 在 localProviders 中查找对应供应商
   const index = localProviders.value.findIndex(p => p.id === row.id)
   if (index < 0) {
     showTestFeedback('error', `未找到供应商 [${row.name || row.id}]，可能已被删除`)
     return
   }
-  editProvider(index)
+  editedProvider.value = JSON.parse(JSON.stringify(localProviders.value[index]))
+  editorIndex.value = index
+  showEditor.value = true
 }
 </script>
 

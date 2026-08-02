@@ -1,9 +1,9 @@
 
-.agenttokens-app-container[data-v-244ad0ae] {
+.agenttokens-app-container[data-v-041d37af] {
   padding-bottom: 0;
 }
 @media (max-width: 768px) {
-.agenttokens-app-container[data-v-244ad0ae] {
+.agenttokens-app-container[data-v-041d37af] {
     padding-bottom: calc(90px + env(safe-area-inset-bottom));
 }
 }

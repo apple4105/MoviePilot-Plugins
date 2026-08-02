@@ -426,7 +426,7 @@ const _hoisted_14$2 = {
   class: "px-4 pb-3"
 };
 
-const {computed: computed$4,ref: ref$3,watch: watch$2} = await importShared('vue');
+const {computed: computed$4,nextTick: nextTick$2,ref: ref$3,watch: watch$2} = await importShared('vue');
 
 
 const _sfc_main$4 = {
@@ -480,11 +480,18 @@ const dialogVisible = computed$4({
 
 const isEdit = computed$4(() => props.editorIndex >= 0);
 
-// 提取纯 URL：若输入包含 " - " 格式，提取后半段的 http/https 地址
+// 提取纯 URL：若输入包含对象或 " - " 格式，提取纯 http/https 地址
 function extractPureUrl(input) {
-  if (!input || typeof input !== 'string') return input
-  const trimmed = input.trim();
-  // 检查是否包含 " - " 格式（厂商名称 - API地址）
+  if (!input) return ''
+  // 1. 如果 VCombobox 返回的是对象，优先提取 value 或 title
+  let rawStr = input;
+  if (typeof input === 'object') {
+    rawStr = input.value || input.title || input.name || '';
+  }
+  if (typeof rawStr !== 'string') return ''
+
+  const trimmed = rawStr.trim();
+  // 2. 检查是否包含 " - " 格式（厂商名称 - API地址）
   const separatorIndex = trimmed.indexOf(' - ');
   if (separatorIndex > 0) {
     const possibleUrl = trimmed.slice(separatorIndex + 3).trim();
@@ -492,16 +499,13 @@ function extractPureUrl(input) {
       return possibleUrl
     }
   }
-  // 直接返回纯 URL
+  // 3. 直接返回纯 URL
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return trimmed
   }
-  // 尝试从字符串中提取 URL
+  // 4. 正则匹配 URL
   const urlMatch = trimmed.match(/https?:\/\/[^\s]+/);
-  if (urlMatch) {
-    return urlMatch[0]
-  }
-  return trimmed
+  return urlMatch ? urlMatch[0] : trimmed
 }
 
 // 厂商 API 地址列表，用于下拉选择（仅展示已启用的厂商）
@@ -554,13 +558,20 @@ const testButtonColor = computed$4(() => {
   return 'primary'
 });
 
+// 初始化标志位：防止编辑弹窗打开时 base_url watcher 误触发名称覆盖
+const isInitializing = ref$3(false);
+
 watch$2(dialogVisible, (val) => {
   if (val) {
+    isInitializing.value = true;
     showApiKey.value = false;
     modelError.value = '';
     testResult.value = null;
     connectionTestState.value = null;
     modelOptions.value = [];
+    nextTick$2(() => {
+      isInitializing.value = false;
+    });
   }
 });
 
@@ -576,7 +587,7 @@ watch$2(testResult, (val) => {
 watch$2(
   () => props.provider.base_url,
   (newUrl) => {
-    if (!newUrl) return
+    if (!newUrl || isInitializing.value) return
     const cleanUrl = extractPureUrl(newUrl);
     const matchedVendor = props.vendors.find(v => v.url === cleanUrl);
     if (matchedVendor && matchedVendor.name) {
@@ -623,6 +634,14 @@ async function testConnection() {
       props.provider.api_key = decoded;
       showClipboard('API Key 已自动从 Base64 解码', 'info');
     }
+  }
+
+  // 规范化模型字段：VCombobox 可能返回对象，确保传给后端的是字符串
+  const _model = props.provider.model;
+  if (_model && typeof _model === 'object') {
+    props.provider.model = _model.value || _model.name || _model.label || _model.title || '';
+  } else if (typeof _model !== 'string') {
+    props.provider.model = _model != null ? String(_model) : '';
   }
 
   // 若模型为空，自动触发模型刷新
@@ -848,11 +867,17 @@ async function queryModels() {
       testResult.value = { success: false, message: '获取模型列表失败：未获取到模型' };
     } else if (modelOptions.value.length === 1) {
       // 只有一个模型时自动选中
-      props.provider.model = modelOptions.value[0].value;
+      // ✅ 安全提取模型值，防止 .value 变成 undefined 或 [object Object]
+      const firstOpt = modelOptions.value[0];
+      const firstVal = typeof firstOpt === 'object' ? (firstOpt.value || firstOpt.title || firstOpt) : firstOpt;
+      props.provider.model = typeof firstVal === 'string' ? firstVal : String(firstVal || '');
       testResult.value = { success: true, message: `获取模型列表成功，共 ${modelOptions.value.length} 个模型` };
     } else {
       // 多个模型时默认选中第一个
-      props.provider.model = modelOptions.value[0].value;
+      // ✅ 安全提取模型值，防止 .value 变成 undefined 或 [object Object]
+      const firstOpt = modelOptions.value[0];
+      const firstVal = typeof firstOpt === 'object' ? (firstOpt.value || firstOpt.title || firstOpt) : firstOpt;
+      props.provider.model = typeof firstVal === 'string' ? firstVal : String(firstVal || '');
       testResult.value = { success: true, message: `获取模型列表成功，共 ${modelOptions.value.length} 个模型` };
     }
   } catch (err) {
@@ -1010,6 +1035,9 @@ return (_ctx, _cache) => {
                       modelValue: __props.provider.model,
                       "onUpdate:modelValue": _cache[6] || (_cache[6] = $event => ((__props.provider.model) = $event)),
                       items: modelOptions.value,
+                      "item-title": "title",
+                      "item-value": "value",
+                      "return-object": false,
                       loading: loadingModels.value,
                       "error-messages": modelError.value,
                       variant: "outlined",
@@ -1194,7 +1222,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const ProviderEditorDialog = /*#__PURE__*/_export_sfc(_sfc_main$4, [['__scopeId',"data-v-5cfb1ec0"]]);
+const ProviderEditorDialog = /*#__PURE__*/_export_sfc(_sfc_main$4, [['__scopeId',"data-v-a67c57ef"]]);
 
 const {createElementVNode:_createElementVNode$3,renderList:_renderList$2,Fragment:_Fragment$2,openBlock:_openBlock$3,createElementBlock:_createElementBlock$2,resolveComponent:_resolveComponent$3,createVNode:_createVNode$3,createCommentVNode:_createCommentVNode$2,toDisplayString:_toDisplayString$3,normalizeClass:_normalizeClass$2,unref:_unref$2,createTextVNode:_createTextVNode$3,mergeProps:_mergeProps,withCtx:_withCtx$3,createBlock:_createBlock$3,withModifiers:_withModifiers$1} = await importShared('vue');
 
@@ -2457,7 +2485,7 @@ function addProvider() {
 function editProvider(providerId) {
   const index = localProviders.value.findIndex(p => p.id === providerId);
   if (index < 0) return
-  editedProvider.value = { ...localProviders.value[index] };
+  editedProvider.value = JSON.parse(JSON.stringify(localProviders.value[index]));
   editorIndex.value = index;
   showEditor.value = true;
 }
@@ -2520,6 +2548,9 @@ async function handleImportFile(event) {
   if (!file) return
 
   const reader = new FileReader();
+  reader.onerror = () => {
+    alert('导入失败：文件读取错误，请检查文件权限或重新选择文件');
+  };
   reader.onload = async (e) => {
     try {
       const data = JSON.parse(e.target?.result);
@@ -2530,7 +2561,6 @@ async function handleImportFile(event) {
         return
       }
       const importVendors = Array.isArray(data?.vendors) ? data.vendors : [];
-      const totalCount = importConfig.providers.length + importVendors.length;
       // 确认覆盖
       const ok = confirm(
         `即将导入 ${importConfig.providers.length} 个供应商和 ${importVendors.length} 个厂商配置，这将覆盖当前所有配置。\n\n确定要继续吗？`,
@@ -2538,12 +2568,12 @@ async function handleImportFile(event) {
       if (!ok) return
 
       // 写入配置（providers + 基础设置）
-      configValue.value = {
-        enabled: Boolean(importConfig.enabled ?? configValue.value.enabled),
-        show_sidebar_nav: Boolean(importConfig.show_sidebar_nav ?? configValue.value.show_sidebar_nav),
-        max_failures: Number(importConfig.max_failures) || 3,
-        providers: importConfig.providers.map((p, idx) => normalizeProvider(p, idx + 1)),
-      };
+      // 注意：configValue 是只读 computed，必须逐属性 mutate 而非整体赋值
+      configValue.value.enabled = Boolean(importConfig.enabled ?? configValue.value.enabled);
+      configValue.value.show_sidebar_nav = Boolean(importConfig.show_sidebar_nav ?? configValue.value.show_sidebar_nav);
+      configValue.value.max_failures = Number(importConfig.max_failures) || 3;
+      configValue.value.max_retries = Number(importConfig.max_retries) ?? 2;
+      configValue.value.providers = importConfig.providers.map((p, idx) => normalizeProvider(p, idx + 1));
       localProviders.value = [...configValue.value.providers];
       emit('auto-save');
 
@@ -2567,7 +2597,6 @@ async function handleImportFile(event) {
             await props.api.post(`${props.pluginBase}/vendors`, vendorData);
           }
         } catch (vendorErr) {
-          console.warn('厂商数据导入失败:', vendorErr);
           alert('供应商配置已导入，但厂商数据导入失败，请手动检查厂商页。');
         }
       }
@@ -2691,23 +2720,20 @@ function toggleVendorDragMode() {
   vendorRef.value?.toggleDragMode();
 }
 
-// 从总览页点击名称跳转到供应商 Tab 并打开编辑弹窗
-async function openVendorEditFromOverview(row) {
+// 从总览页点击名称直接打开编辑弹窗（不切换 Tab）
+function openVendorEditFromOverview(row) {
   if (!row || !row.id) {
     showTestFeedback('error', '供应商数据异常，无法编辑');
     return
   }
-  // 切换到供应商 Tab
-  activeTab.value = 'config';
-  // 等待 Tab 切换完成后再打开弹窗
-  await nextTick();
-  // 在 localProviders 中查找对应供应商
   const index = localProviders.value.findIndex(p => p.id === row.id);
   if (index < 0) {
     showTestFeedback('error', `未找到供应商 [${row.name || row.id}]，可能已被删除`);
     return
   }
-  editProvider(index);
+  editedProvider.value = JSON.parse(JSON.stringify(localProviders.value[index]));
+  editorIndex.value = index;
+  showEditor.value = true;
 }
 
 return (_ctx, _cache) => {
@@ -3320,6 +3346,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const AgentTokensManager = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-ca505a24"]]);
+const AgentTokensManager = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-7625d539"]]);
 
 export { AgentTokensManager as A };

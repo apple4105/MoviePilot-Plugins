@@ -32,6 +32,8 @@ const status = ref({
   summary: {},
   active_provider_id: null,
 })
+const showRefreshConfirm = ref(false)
+const refreshToast = ref({ show: false, message: '', color: 'success' })
 
 // 构造 API 基础路径。
 const pluginBase = computed(() => `plugin/${props.pluginId || 'AgentTokensPro'}`)
@@ -75,6 +77,30 @@ async function loadStatus() {
     error.value = err?.message || '加载失败'
   } finally {
     loading.value = false
+  }
+}
+
+// 手动刷新：若检测到未保存更改，先弹确认弹窗。
+function handleRefresh() {
+  if (configDirty.value) {
+    showRefreshConfirm.value = true
+    return
+  }
+  doRefresh()
+}
+
+// 确认弹窗"确定"回调：丢弃未保存更改，强制拉取。
+function confirmRefresh() {
+  showRefreshConfirm.value = false
+  configDirty.value = false
+  doRefresh()
+}
+
+// 实际执行刷新并展示 Toast。
+async function doRefresh() {
+  await loadStatus()
+  if (!error.value) {
+    refreshToast.value = { show: true, message: '配置已重新加载', color: 'success' }
   }
 }
 
@@ -382,7 +408,7 @@ onUnmounted(() => {
       :loading="loading"
       :saving="saving"
       :hide-title="hideTitle"
-      @refresh="loadStatus"
+      @refresh="handleRefresh"
       @save="saveConfig"
       @auto-save="autoSave"
       @reset-usage="resetUsage"
@@ -393,6 +419,30 @@ onUnmounted(() => {
       @select-provider="selectProvider"
       @test-provider="testProvider"
     />
+
+    <!-- 刷新确认弹窗：未保存更改保护 -->
+    <VDialog v-model="showRefreshConfirm" max-width="420" persistent>
+      <VCard>
+        <VCardTitle class="text-subtitle-1">确认刷新</VCardTitle>
+        <VCardText>
+          检测到未保存的更改，刷新将丢弃当前修改，是否继续？
+        </VCardText>
+        <VCardActions class="d-flex justify-end ga-2">
+          <VBtn variant="text" @click="showRefreshConfirm = false">取消</VBtn>
+          <VBtn color="primary" @click="confirmRefresh">确定</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
+
+    <!-- 操作结果 Toast -->
+    <VSnackbar
+      v-model="refreshToast.show"
+      :color="refreshToast.color"
+      timeout="2500"
+      location="bottom"
+    >
+      {{ refreshToast.message }}
+    </VSnackbar>
   </div>
 </template>
 
