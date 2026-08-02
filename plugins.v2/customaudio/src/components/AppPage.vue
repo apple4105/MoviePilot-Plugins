@@ -28,6 +28,9 @@ const loading = ref(false)
 const saving = ref(false)
 const notice = ref({ show: false, text: '', type: 'success' })
 
+// 上次成功加载/保存时的配置快照（用于 Dirty Check）
+let _lastSavedConfig = null
+
 // 密码可见性
 const showInputKey = ref(false)
 const showOutputKey = ref(false)
@@ -35,6 +38,9 @@ const showOutputKey = ref(false)
 // 测试中状态
 const testingTts = ref(false)
 const testingAsr = ref(false)
+
+// Base64 解码提示
+const base64Hint = ref({ show: false, text: '', color: 'info' })
 
 const config = ref({
   enabled: true,
@@ -65,15 +71,77 @@ function showNotice(text, type = 'success') {
   notice.value = { show: true, text, type }
 }
 
+// 显示 Base64 解码提示（带自动消失）
+let base64HintTimer = null
+function showBase64Hint(text, color = 'info', duration = 3000) {
+  if (base64HintTimer) clearTimeout(base64HintTimer)
+  base64Hint.value = { show: true, text, color }
+  base64HintTimer = setTimeout(() => {
+    base64Hint.value.show = false
+  }, duration)
+}
+
+// Base64 智能解码：检测是否为 Base64 编码，支持嵌套解码（最多 3 次）
+function decodeBase64Smart(input) {
+  if (!input || typeof input !== 'string') return input
+  let current = input.trim()
+  for (let i = 0; i < 3; i++) {
+    // 检查是否为有效的 Base64 字符串（长度 >= 4，只含 Base64 字符，长度是 4 的倍数）
+    if (current.length < 4 || !/^[A-Za-z0-9+/]*={0,2}$/.test(current) || current.length % 4 !== 0) {
+      break
+    }
+    try {
+      const decoded = atob(current)
+      // 解码结果必须是可打印文本（排除二进制）
+      if (!/^[\x20-\x7E\t\n\r]*$/.test(decoded)) {
+        break
+      }
+      // 如果解码后与原始值相同，说明不是 Base64
+      if (decoded === current) {
+        break
+      }
+      current = decoded
+    } catch {
+      break
+    }
+  }
+  return current
+}
+
+// 检测并解码 Base64 API Key
+function tryDecodeBase64Key(keyType) {
+  const keyField = keyType === 'input' ? 'input_api_key' : 'output_api_key'
+  const currentValue = config.value[keyField]
+
+  if (!currentValue || typeof currentValue !== 'string') return
+
+  const decoded = decodeBase64Smart(currentValue)
+  if (decoded !== currentValue) {
+    config.value[keyField] = decoded
+    const label = keyType === 'input' ? 'ASR' : 'TTS'
+    showBase64Hint(`${label} API Key 已自动从 Base64 解码`, 'info')
+  }
+}
+
+function _takeSnapshot() {
+  _lastSavedConfig = JSON.stringify(config.value)
+}
+
+function hasUnsavedChanges() {
+  if (!_lastSavedConfig) return false
+  return JSON.stringify(config.value) !== _lastSavedConfig
+}
+
 // 从 initialConfig 加载（Config.vue 模式）
 function loadFromInitialConfig() {
   if (props.initialConfig) {
     config.value = { ...config.value, ...props.initialConfig }
+    _takeSnapshot()
   }
 }
 
 // 从插件 API 加载配置
-async function loadStatus() {
+async function loadStatus(showNoticeOnSuccess = false) {
   if (props.configMode) {
     loadFromInitialConfig()
     return
@@ -85,6 +153,10 @@ async function loadStatus() {
       const configData = res?.data
       if (configData && typeof configData === 'object') {
         config.value = { ...config.value, ...configData }
+      }
+      _takeSnapshot()
+      if (showNoticeOnSuccess) {
+        showNotice('配置已重新加载')
       }
     } else {
       showNotice(res?.message || '配置加载失败', 'error')
@@ -146,6 +218,7 @@ async function saveConfig() {
       if (res?.data) {
         config.value = { ...config.value, ...res.data }
       }
+      _takeSnapshot()
       showNotice(res?.message || '保存成功')
       return true
     } else {
@@ -206,10 +279,10 @@ async function testAsr() {
   }
 }
 
-defineExpose({ loadStatus, saveConfig, getConfig, loading, saving })
+defineExpose({ loadStatus, saveConfig, getConfig, hasUnsavedChanges, loading, saving })
 
 onMounted(() => {
-  loadStatus()
+  loadStatus(false)
 })
 </script>
 
@@ -230,6 +303,16 @@ onMounted(() => {
     >
       {{ notice.text }}
     </VAlert>
+
+    <!-- Base64 解码提示（Toast 通知，与保存成功提示一致） -->
+    <VSnackbar
+      v-model="base64Hint.show"
+      :color="base64Hint.color"
+      location="bottom"
+      timeout="3000"
+    >
+      {{ base64Hint.text }}
+    </VSnackbar>
 
     <!-- 总开关 -->
     <VSwitch
@@ -298,6 +381,8 @@ onMounted(() => {
           variant="outlined"
           :append-inner-icon="showInputKey ? 'mdi-eye-off' : 'mdi-eye'"
           @click:append-inner="showInputKey = !showInputKey"
+          @blur="tryDecodeBase64Key('input')"
+          @paste="() => setTimeout(() => tryDecodeBase64Key('input'), 50)"
         />
       </VCol>
       <VCol cols="12" sm="6">
@@ -362,6 +447,8 @@ onMounted(() => {
           variant="outlined"
           :append-inner-icon="showOutputKey ? 'mdi-eye-off' : 'mdi-eye'"
           @click:append-inner="showOutputKey = !showOutputKey"
+          @blur="tryDecodeBase64Key('output')"
+          @paste="() => setTimeout(() => tryDecodeBase64Key('output'), 50)"
         />
       </VCol>
       <VCol cols="12" sm="6">
