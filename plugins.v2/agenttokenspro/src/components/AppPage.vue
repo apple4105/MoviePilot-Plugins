@@ -68,8 +68,9 @@ async function loadStatus() {
         config: status.value.config || lastServerConfig.value,
       }
     } else {
-      status.value = nextStatus
+      // 先更新服务器快照，再更新 status，避免 watch 误触发 dirty
       lastServerConfig.value = JSON.parse(JSON.stringify(nextStatus.config || {}))
+      status.value = nextStatus
     }
     // 同时加载厂商列表
     await loadVendors()
@@ -115,8 +116,9 @@ function applyStatusData(data) {
       config: status.value.config || lastServerConfig.value,
     }
   } else {
-    status.value = nextStatus
+    // 先更新服务器快照，再更新 status，避免 watch 误触发 dirty
     lastServerConfig.value = JSON.parse(JSON.stringify(nextStatus.config || {}))
+    status.value = nextStatus
   }
 }
 
@@ -378,7 +380,19 @@ defineExpose({
 watch(
   () => config.value,
   () => {
-    if (lastServerConfig.value) configDirty.value = true
+    if (!lastServerConfig.value) return
+    // 深比较：只有当前配置与服务器快照真正不同时才标记 dirty
+    // 避免 loadStatus 更新 status 时误触发 dirty 状态
+    try {
+      const currentStr = JSON.stringify(config.value)
+      const serverStr = JSON.stringify(lastServerConfig.value)
+      if (currentStr !== serverStr) {
+        configDirty.value = true
+      }
+    } catch (e) {
+      // 序列化失败时回退到标记 dirty
+      configDirty.value = true
+    }
   },
   { deep: true },
 )

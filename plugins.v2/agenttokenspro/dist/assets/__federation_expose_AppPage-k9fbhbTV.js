@@ -1,5 +1,5 @@
 import { importShared } from './__federation_fn_import-JrT3xvdd.js';
-import { A as AgentTokensManager } from './AgentTokensManager-B3V6_fLA.js';
+import { A as AgentTokensManager } from './AgentTokensManager-b7jtP-P3.js';
 import { _ as _export_sfc, u as unwrapResponse } from './_plugin-vue_export-helper-MUdERlsH.js';
 
 const {createVNode:_createVNode,createTextVNode:_createTextVNode,resolveComponent:_resolveComponent,withCtx:_withCtx,toDisplayString:_toDisplayString,openBlock:_openBlock,createElementBlock:_createElementBlock} = await importShared('vue');
@@ -80,8 +80,9 @@ async function loadStatus() {
         config: status.value.config || lastServerConfig.value,
       };
     } else {
-      status.value = nextStatus;
+      // 先更新服务器快照，再更新 status，避免 watch 误触发 dirty
       lastServerConfig.value = JSON.parse(JSON.stringify(nextStatus.config || {}));
+      status.value = nextStatus;
     }
     // 同时加载厂商列表
     await loadVendors();
@@ -374,7 +375,19 @@ __expose({
 watch(
   () => config.value,
   () => {
-    if (lastServerConfig.value) configDirty.value = true;
+    if (!lastServerConfig.value) return
+    // 深比较：只有当前配置与服务器快照真正不同时才标记 dirty
+    // 避免 loadStatus 更新 status 时误触发 dirty 状态
+    try {
+      const currentStr = JSON.stringify(config.value);
+      const serverStr = JSON.stringify(lastServerConfig.value);
+      if (currentStr !== serverStr) {
+        configDirty.value = true;
+      }
+    } catch (e) {
+      // 序列化失败时回退到标记 dirty
+      configDirty.value = true;
+    }
   },
   { deep: true },
 );
@@ -490,6 +503,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const AppPage = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-041d37af"]]);
+const AppPage = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-5cfb05f0"]]);
 
 export { AppPage as default };

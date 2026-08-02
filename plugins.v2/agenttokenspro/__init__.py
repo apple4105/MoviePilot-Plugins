@@ -10,6 +10,7 @@ import requests
 
 from app import schemas
 from app.api.endpoints.plugin import register_plugin_api
+from app.core.config import settings as global_settings
 from app.core.event import Event, eventmanager
 from app.log import logger
 from app.plugins import _PluginBase
@@ -32,7 +33,7 @@ class AgentTokensPro(_PluginBase):
     plugin_name = "Agent Tokens Pro"
     plugin_desc = "管理多平台 Token 配额，按优先级自动切换 Agent LLM 供应商。"
     plugin_icon = "agentresourceofficer.png"
-    plugin_version = "0.0.7"
+    plugin_version = "0.0.8"
     plugin_author = "apple4105"
     author_url = "https://github.com/apple4105"
     plugin_config_prefix = "agenttokenspro_"
@@ -437,6 +438,18 @@ class AgentTokensPro(_PluginBase):
         else:
             setattr(event_data, key, value)
 
+    def _sync_global_settings(self, provider: dict) -> None:
+        """
+        将选中的供应商配置同步到全局 LLM settings，
+        使不经过事件链的系统功能（如 ActivityLogMiddleware 摘要）也能使用插件的供应商。
+        """
+        if not provider or not isinstance(provider, dict):
+            return
+        global_settings.LLM_PROVIDER = provider.get("provider") or "openai"
+        global_settings.LLM_MODEL = provider.get("model") or ""
+        global_settings.LLM_API_KEY = provider.get("api_key") or ""
+        global_settings.LLM_BASE_URL = provider.get("base_url") or ""
+
     @classmethod
     def _normalize_provider(cls, provider: dict, index: int) -> dict:
         """
@@ -612,8 +625,20 @@ class AgentTokensPro(_PluginBase):
     def _provider_status_rows(self) -> List[dict]:
         """
         构建前端展示用的供应商状态列表。
+
+        在返回数据前，对所有冷却到期的供应商执行状态重置，
+        确保前端轮询时能即时看到恢复正常的供应商。
         """
         usage = self._load_usage()
+        max_failures = getattr(self, "_max_failures", self.DEFAULT_MAX_FAILURES)
+        # 检查所有供应商的冷却恢复状态，到期的立即重置数据库
+        for provider in getattr(self, "_providers", []):
+            pid = provider.get("id")
+            if not pid:
+                continue
+            record = usage.get(pid, {})
+            if self._to_int(record.get("failure_count"), 0) >= max_failures:
+                self._check_cooldown_recovery(pid, usage)
         rows = []
         for provider in getattr(self, "_providers", []):
             provider_usage = self._provider_usage(provider, usage)
@@ -1889,6 +1914,7 @@ class AgentTokensPro(_PluginBase):
                     self._event_set(event.event_data, "selected_provider_id", provider.get("id"))
                     self._event_set(event.event_data, "selected_provider_name", provider.get("name"))
                     self._event_set(event.event_data, "source", self.__class__.__name__)
+                    self._sync_global_settings(provider)
                     return
 
                 # 预检通过，继续使用手动锁定的供应商
@@ -1906,6 +1932,8 @@ class AgentTokensPro(_PluginBase):
                 self._event_set(event.event_data, "selected_provider_id", manual_provider.get("id"))
                 self._event_set(event.event_data, "selected_provider_name", manual_provider.get("name"))
                 self._event_set(event.event_data, "source", self.__class__.__name__)
+                # 同步到全局 settings，供不经过事件链的系统功能使用
+                self._sync_global_settings(manual_provider)
                 # 立即更新时间戳，提前展示"正在使用"
                 with self._usage_lock:
                     usage = self._load_usage()
@@ -1985,6 +2013,8 @@ class AgentTokensPro(_PluginBase):
         self._event_set(event.event_data, "selected_provider_id", provider.get("id"))
         self._event_set(event.event_data, "selected_provider_name", provider.get("name"))
         self._event_set(event.event_data, "source", self.__class__.__name__)
+        # 同步到全局 settings，供不经过事件链的系统功能使用
+        self._sync_global_settings(provider)
 
     @eventmanager.register(EventType.AgentTokensUsage)
     def record_tokens_usage(self, event: Event):

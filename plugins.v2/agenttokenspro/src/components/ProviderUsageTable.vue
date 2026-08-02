@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { formatTokens } from '../provider'
 
 const props = defineProps({
@@ -25,6 +25,16 @@ const emit = defineEmits(['reset', 'select', 'open-vendor-edit', 'test', 'reset-
 
 const testingId = ref(null)
 
+// 冷却倒计时：每秒更新的时间基准，驱动 cooldownRemaining 响应式刷新
+const now = ref(Date.now())
+let _nowTimer = null
+onMounted(() => {
+  _nowTimer = setInterval(() => { now.value = Date.now() }, 1000)
+})
+onUnmounted(() => {
+  if (_nowTimer) { clearInterval(_nowTimer); _nowTimer = null }
+})
+
 async function handleTest(row) {
   if (testingId.value) return
   testingId.value = row.id
@@ -41,10 +51,14 @@ async function handleTest(row) {
 }
 
 // 仅展示已启用的供应商，已停用供应商不显示在用量列表中
-// 排序：正常(0) > 缺配置(1) > 故障/耗尽(2) > 冷却中(3) > 硬禁用(4)，同组保持原始顺序
+// 排序：活跃供应商(置顶) > 正常(0) > 缺配置(1) > 故障/耗尽(2) > 冷却中(3) > 硬禁用(4)，同组保持原始顺序
 const displayRows = computed(() => {
   const rows = (props.providerRows || []).filter(row => row.enabled !== false)
   return [...rows].sort((a, b) => {
+    // 活跃供应商始终置顶（仅视图层排序，不修改原始数据，避免 dirty check 误触发）
+    const aActive = a.id === props.activeProviderId ? 0 : 1
+    const bActive = b.id === props.activeProviderId ? 0 : 1
+    if (aActive !== bActive) return aActive - bActive
     const aHard = !!a.usage?.hard_disabled
     const bHard = !!b.usage?.hard_disabled
     const aCooldown = !aHard && (a.usage?.failure_count || 0) >= props.maxFailures && !!a.usage?.disabled_at && !a.usage?.exhausted
@@ -138,7 +152,9 @@ function handleNameClick(row) {
 }
 
 // 计算冷却剩余时间文本，返回 null 表示不在冷却中或已过期
+// 依赖响应式 now，每秒自动刷新
 function cooldownRemaining(row) {
+  void now.value // 让 Vue 追踪依赖，每秒触发重新计算
   const cooldownUntil = row.usage?.cooldown_until
   if (!cooldownUntil) return null
   const target = new Date(cooldownUntil.replace(' ', 'T'))

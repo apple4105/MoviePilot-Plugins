@@ -38,11 +38,15 @@ const emit = defineEmits(['edit', 'remove', 'select', 'toggle', 'reorder', 'rese
 const dragIndex = ref(-1)
 const dragOverIndex = ref(-1)
 
-// 排序：正常(0) > 缺配置(1) > 故障/耗尽(2) > 冷却中(3) > 硬禁用(4)，同组保持原始顺序
+// 排序：活跃供应商(置顶) > 正常(0) > 缺配置(1) > 故障/耗尽(2) > 冷却中(3) > 硬禁用(4)，同组保持原始顺序
 // 拖拽模式下不排序，保持用户拖拽顺序
 const sortedProviders = computed(() => {
   if (props.dragMode) return [...props.providers]
   return [...props.providers].sort((a, b) => {
+    // 活跃供应商始终置顶（仅视图层排序，不修改原始数据，避免 dirty check 误触发）
+    const aActive = a.id === props.activeProviderId ? 0 : 1
+    const bActive = b.id === props.activeProviderId ? 0 : 1
+    if (aActive !== bActive) return aActive - bActive
     const aRank = isHardDisabled(a) ? 4 : (isCooldown(a) ? 3 : (isFaulty(a) ? 2 : (isMisconfigured(a) ? 1 : 0)))
     const bRank = isHardDisabled(b) ? 4 : (isCooldown(b) ? 3 : (isFaulty(b) ? 2 : (isMisconfigured(b) ? 1 : 0)))
     return aRank - bRank
