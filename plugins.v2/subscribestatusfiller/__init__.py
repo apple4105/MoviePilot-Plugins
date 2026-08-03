@@ -1,0 +1,551 @@
+# -*- coding: utf-8 -*-
+"""
+剧集订阅增强
+
+根据 TMDB 剧集播出状态自动调整订阅下载策略：
+- 已完结剧集 -> 开启全集洗版，只收完整剧集包，下完自动收口
+- 连载中剧集 -> 锁定到已播出集数，逐集追更，不下含未播剧集的合集包
+"""
+import json
+from datetime import date, datetime
+from typing import Any, Dict, List, Optional, Tuple
+
+from app.chain.media import MediaChain
+from app.chain.tmdb import TmdbChain
+from app.core.event import Event, eventmanager
+from app.db.subscribe_oper import SubscribeOper
+from app.db.models.subscribe import Subscribe
+from app.schemas.types import EventType, ChainEventType, MediaType
+from app.schemas.event import SubscribeCompletionCheckEventData
+from app.log import logger
+from app.plugins import _PluginBase
+
+
+class SubscribeStatusFiller(_PluginBase):
+    # 插件名称
+    plugin_name = "剧集订阅增强"
+    # 插件描述
+    plugin_desc = "根据剧集播出状态自动调整订阅策略：已完结剧下完整剧集包，连载剧只追已播集数"
+    # 插件版本
+    plugin_version = "1.0.0"
+    # 插件作者
+    plugin_author = "apple4105"
+    # 作者主页
+    author_url = ""
+    # 插件配置项 ID 前缀
+    plugin_config_prefix = "subscribestatusfiller_"
+    # 加载顺序
+    plugin_order = 20
+    # 可使用的用户级别
+    auth_level = 1
+
+    # 配置项
+    _enable: bool = True
+    _overwrite: bool = True
+    _ended_best_version: bool = True
+    _returning_lock_aired: bool = True
+    _check_interval: int = 6
+
+    def init_plugin(self, config: dict = None):
+        self.subscribe_oper = SubscribeOper()
+        self.mediachain = MediaChain()
+        self.tmdbchain = TmdbChain()
+        self._load_config(config or {})
+
+    def _load_config(self, config: dict):
+        self._enable = config.get("enable", True)
+        self._overwrite = config.get("overwrite", True)
+        self._ended_best_version = config.get("ended_best_version", True)
+        self._returning_lock_aired = config.get("returning_lock_aired", True)
+        self._check_interval = int(config.get("check_interval", 6)) or 6
+
+    def get_state(self) -> bool:
+        return self._enable
+
+    def stop_service(self):
+        pass
+
+    def get_service(self) -> List[Dict[str, Any]]:
+        if not self._enable or not self._returning_lock_aired:
+            return []
+        return [
+            {
+                "id": "check_returning_series",
+                "name": "检查连载剧更新",
+                "trigger": "interval",
+                "interval": max(self._check_interval, 1) * 3600,
+                "func": self._check_returning_series,
+                "kwargs": {},
+            }
+        ]
+
+    def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
+        return [
+            {
+                "component": "VRow",
+                "content": [
+                    {
+                        "component": "VCol",
+                        "props": {"cols": 12, "md": 6},
+                        "content": [
+                            {
+                                "component": "VSwitch",
+                                "props": {
+                                    "model": "enable",
+                                    "label": "启用插件",
+                                    "hint": "开启后，新添加的电视剧订阅会自动根据完结状态调整下载策略",
+                                    "persistent-hint": True,
+                                },
+                            }
+                        ],
+                    },
+                    {
+                        "component": "VCol",
+                        "props": {"cols": 12, "md": 6},
+                        "content": [
+                            {
+                                "component": "VSwitch",
+                                "props": {
+                                    "model": "overwrite",
+                                    "label": "覆盖已有策略",
+                                    "hint": "开启后，已设置过策略的订阅也会重新调整；关闭则只调整新订阅",
+                                    "persistent-hint": True,
+                                },
+                            }
+                        ],
+                    },
+                ],
+            },
+            {
+                "component": "VRow",
+                "content": [
+                    {
+                        "component": "VCol",
+                        "props": {"cols": 12, "md": 6},
+                        "content": [
+                            {
+                                "component": "VSwitch",
+                                "props": {
+                                    "model": "ended_best_version",
+                                    "label": "已完结剧自动开启全集洗版",
+                                    "hint": "已完结的剧只会下载完整覆盖整季的剧集包，下完自动收口，不下载缺集残包",
+                                    "persistent-hint": True,
+                                },
+                            }
+                        ],
+                    },
+                    {
+                        "component": "VCol",
+                        "props": {"cols": 12, "md": 6},
+                        "content": [
+                            {
+                                "component": "VSwitch",
+                                "props": {
+                                    "model": "returning_lock_aired",
+                                    "label": "连载剧只追已播集数",
+                                    "hint": "连载中的剧不下含未播剧集的合集包，只下载已播出集数，新集播出后自动追更",
+                                    "persistent-hint": True,
+                                },
+                            }
+                        ],
+                    },
+                ],
+            },
+            {
+                "component": "VRow",
+                "content": [
+                    {
+                        "component": "VCol",
+                        "props": {"cols": 12, "md": 6},
+                        "content": [
+                            {
+                                "component": "VTextField",
+                                "props": {
+                                    "model": "check_interval",
+                                    "label": "连载剧检查间隔（小时）",
+                                    "hint": "每隔几小时检查一次连载剧是否有新集播出，自动更新追更进度",
+                                    "persistent-hint": True,
+                                    "type": "number",
+                                    "min": 1,
+                                    "max": 72,
+                                },
+                            }
+                        ],
+                    },
+                ],
+            },
+            {
+                "component": "VRow",
+                "content": [
+                    {
+                        "component": "VCol",
+                        "props": {"cols": 12},
+                        "content": [
+                            {
+                                "component": "VAlert",
+                                "props": {
+                                    "type": "info",
+                                    "variant": "tonal",
+                                    "text": "本插件根据 TMDB 剧集状态自动调整订阅下载策略。"
+                                            "已完结的剧：开启全集洗版，只收完整覆盖整季的剧集包，下完自动结束。"
+                                            "连载中的剧：锁定到已播出集数，不会下载含未播剧集的合集包，新集播出后自动追更。"
+                                            "新订阅自动生效，存量订阅可发送 /fill_subscribe_status 命令补全。",
+                                },
+                            }
+                        ],
+                    }
+                ],
+            },
+        ], {
+            "enable": True,
+            "overwrite": True,
+            "ended_best_version": True,
+            "returning_lock_aired": True,
+            "check_interval": 6,
+        }
+
+    def get_api(self) -> List[Dict[str, Any]]:
+        return []
+
+    def get_page(self) -> Optional[List[dict]]:
+        return []
+
+    @staticmethod
+    def get_command() -> List[Dict[str, Any]]:
+        return [
+            {
+                "cmd": "/fill_subscribe_status",
+                "event": EventType.PluginAction,
+                "desc": "补全存量订阅状态并调整下载策略",
+                "category": "订阅管理",
+                "data": {"action": "fill_subscribe_status"},
+            }
+        ]
+
+    @eventmanager.register(EventType.SubscribeAdded)
+    def on_subscribe_added(self, event: Event):
+        """
+        订阅添加事件：查询 TMDB 状态，写入订阅状态，联动下载策略
+        """
+        if not self._enable or not event or not event.event_data:
+            return
+        event_data = event.event_data
+        subscribe_id = event_data.get("subscribe_id") or event_data.get("id")
+        if not subscribe_id:
+            return
+
+        try:
+            subscribe_id = int(subscribe_id)
+        except (TypeError, ValueError):
+            return
+
+        subscribe = self.subscribe_oper.get(subscribe_id)
+        if not subscribe:
+            return
+
+        # 只处理电视剧
+        if subscribe.type != MediaType.TV.value:
+            return
+
+        # 检查覆盖
+        note = self._parse_note(subscribe.note)
+        if not self._overwrite and note.get("strategy_applied"):
+            return
+
+        # 获取 TMDB 状态
+        status = self._get_media_status(subscribe, event_data)
+        if not status:
+            return
+
+        # 写入状态到 note
+        note["tmdb_status"] = status
+
+        # 根据状态联动下载策略
+        if status in ("Ended", "Canceled"):
+            self._apply_ended_strategy(subscribe, note)
+        elif status in ("Returning Series", "In Production", "Pilot"):
+            self._apply_returning_strategy(subscribe, note)
+        else:
+            # 其他状态（如 Planned 等），只写状态不做策略联动
+            note["strategy_applied"] = False
+            self._save_note(subscribe, note)
+            return
+
+        # 保存
+        self._save_note(subscribe, note)
+        logger.info(f"订阅 {subscribe.name}（{subscribe.id}）策略已应用：{status}")
+
+    @eventmanager.register(ChainEventType.SubscribeCompletionCheck)
+    def on_completion_check(self, event: Event):
+        """
+        订阅完成判定事件：连载剧否决误完成，继续追更
+        """
+        if not self._enable or not event or not event.event_data:
+            return
+        event_data: SubscribeCompletionCheckEventData = event.event_data
+        subscribe = event_data.subscribe
+        if not subscribe:
+            return
+        # 检查订阅状态
+        note = self._parse_note(subscribe.note)
+        status = note.get("tmdb_status", "")
+        if status not in ("Returning Series", "In Production", "Pilot"):
+            return
+        # 连载剧否决完成
+        event_data.cancel = True
+        event_data.source = "SubscribeStatusFiller"
+        event_data.reason = "剧集连载中，继续追更"
+        logger.info(f"订阅 {subscribe.name} 完成被否决（连载中），继续追更")
+
+    @eventmanager.register(EventType.PluginAction)
+    def action_event_handler(self, event: Event):
+        """
+        命令处理：/fill_subscribe_status 补全存量订阅
+        """
+        if not event or not event.event_data:
+            return
+        event_data = event.event_data
+        if event_data.get("action") != "fill_subscribe_status":
+            return
+        channel = event_data.get("channel")
+        userid = event_data.get("user")
+
+        self.post_message(
+            channel=channel,
+            title="开始补全存量订阅状态与策略 ...",
+            userid=userid,
+        )
+        msg = self._fill_existing_subscribes()
+        self.post_message(
+            channel=channel,
+            title=msg or "补全完成",
+            userid=userid,
+        )
+
+    def _check_returning_series(self):
+        """
+        定时任务：检查连载剧是否有新集播出，更新追更进度
+        """
+        if not self._enable or not self._returning_lock_aired:
+            return
+        subscribes = self.subscribe_oper.list() or []
+        today = date.today()
+        updated = 0
+
+        for sub in subscribes:
+            if sub.type != MediaType.TV.value:
+                continue
+            if sub.state == "S":  # 暂停的跳过
+                continue
+            note = self._parse_note(sub.note)
+            status = note.get("tmdb_status", "")
+            if status not in ("Returning Series", "In Production", "Pilot"):
+                continue
+            if not sub.tmdbid or sub.season is None:
+                continue
+
+            # 查询已播集数
+            aired = self._get_aired_count(sub.tmdbid, sub.season)
+            if aired is None or aired == 0:
+                continue
+
+            # 如果已播集数大于当前 total_episode，更新
+            current_total = sub.total_episode or 0
+            if aired > current_total:
+                lack = sub.lack_episode or 0
+                downloaded = max(0, current_total - lack)
+                new_lack = max(0, aired - downloaded)
+                self.subscribe_oper.update(sub.id, {
+                    "total_episode": aired,
+                    "lack_episode": new_lack,
+                    "manual_total_episode": 1,
+                })
+                updated += 1
+                logger.info(f"连载剧 {sub.name} 总集数更新：{current_total} -> {aired}，缺集 {new_lack}")
+
+        if updated:
+            logger.info(f"连载剧检查完成，共更新 {updated} 个订阅")
+
+    def _get_media_status(self, subscribe: Subscribe, event_data: dict) -> Optional[str]:
+        """
+        获取媒体状态（优先从事件中取，回退到 TMDB 查询）
+        """
+        # 优先从事件携带的 mediainfo 取
+        event_mediainfo = event_data.get("mediainfo")
+        if event_mediainfo:
+            if isinstance(event_mediainfo, dict):
+                status = event_mediainfo.get("status")
+            else:
+                status = getattr(event_mediainfo, "status", None)
+            if status:
+                return status
+
+        # 回退：从 TMDB 查询
+        tmdb_id = subscribe.tmdbid
+        if not tmdb_id:
+            return None
+        media_type = subscribe.type
+        try:
+            mtype = MediaType(media_type) if media_type in (
+                MediaType.MOVIE.value, MediaType.TV.value) else None
+        except (ValueError, TypeError):
+            mtype = None
+        tmdb_info = self.mediachain.tmdb_info(tmdbid=tmdb_id, mtype=mtype)
+        if not tmdb_info:
+            return None
+        return tmdb_info.get("status")
+
+    def _apply_ended_strategy(self, subscribe: Subscribe, note: dict):
+        """
+        已完结剧集策略：开启全集洗版
+        """
+        note["strategy_applied"] = True
+        note["strategy_type"] = "ended_best_version"
+        self.subscribe_oper.update(subscribe.id, {
+            "best_version": 1,
+            "best_version_full": 1,
+        })
+
+    def _apply_returning_strategy(self, subscribe: Subscribe, note: dict):
+        """
+        连载剧集策略：锁定到已播集数，逐集追更
+        """
+        note["strategy_applied"] = True
+        note["strategy_type"] = "returning_locked"
+
+        if not subscribe.tmdbid or subscribe.season is None:
+            return
+
+        # 确保不开启全集洗版
+        updates = {
+            "best_version": 0,
+            "best_version_full": 0,
+            "manual_total_episode": 1,
+        }
+
+        # 查询已播集数，锁定 total_episode
+        aired = self._get_aired_count(subscribe.tmdbid, subscribe.season)
+        if aired and aired > 0:
+            current_total = subscribe.total_episode or 0
+            lack = subscribe.lack_episode or 0
+            downloaded = max(0, current_total - lack)
+            new_lack = max(0, aired - downloaded)
+            updates["total_episode"] = aired
+            updates["lack_episode"] = new_lack
+
+        self.subscribe_oper.update(subscribe.id, updates)
+
+    def _get_aired_count(self, tmdb_id: int, season: int) -> Optional[int]:
+        """
+        查询某季已播出集数（air_date <= 今天）
+        """
+        try:
+            episodes = self.tmdbchain.tmdb_episodes(tmdbid=tmdb_id, season=season)
+            if not episodes:
+                return None
+            today = date.today()
+            aired = 0
+            for ep in episodes:
+                if ep.air_date:
+                    try:
+                        ep_date = datetime.strptime(ep.air_date, "%Y-%m-%d").date()
+                        if ep_date <= today:
+                            aired += 1
+                    except ValueError:
+                        continue
+            return aired
+        except Exception as e:
+            logger.warning(f"查询已播集数失败 tmdbid={tmdb_id} season={season}：{e}")
+            return None
+
+    def _parse_note(self, note: Any) -> dict:
+        """解析订阅 note 字段"""
+        if isinstance(note, dict):
+            return note
+        if isinstance(note, str):
+            try:
+                parsed = json.loads(note)
+                return parsed if isinstance(parsed, dict) else {}
+            except (json.JSONDecodeError, TypeError):
+                return {}
+        return {}
+
+    def _save_note(self, subscribe: Subscribe, note: dict):
+        """保存订阅 note 字段"""
+        note_json = json.dumps(note, ensure_ascii=False)
+        self.subscribe_oper.update(subscribe.id, {"note": note_json})
+
+    def _fill_existing_subscribes(self) -> str:
+        """
+        遍历所有订阅，补全状态并应用策略
+        """
+        if not self._enable:
+            return "插件未启用，已跳过"
+
+        subscribes: List[Subscribe] = self.subscribe_oper.list() or []
+        if not subscribes:
+            return "没有找到任何订阅"
+
+        total = 0
+        filled = 0
+        skipped = 0
+        failed = 0
+
+        for subscribe in subscribes:
+            total += 1
+            # 只处理电视剧
+            if subscribe.type != MediaType.TV.value:
+                skipped += 1
+                continue
+
+            note = self._parse_note(subscribe.note)
+            if not self._overwrite and note.get("strategy_applied"):
+                skipped += 1
+                continue
+
+            tmdb_id = subscribe.tmdbid
+            if not tmdb_id:
+                skipped += 1
+                continue
+
+            # 获取状态
+            try:
+                media_type = subscribe.type
+                mtype = MediaType(media_type) if media_type in (
+                    MediaType.MOVIE.value, MediaType.TV.value) else None
+                tmdb_info = self.mediachain.tmdb_info(tmdbid=tmdb_id, mtype=mtype)
+                if not tmdb_info:
+                    failed += 1
+                    continue
+                status = tmdb_info.get("status")
+                if not status:
+                    failed += 1
+                    continue
+            except Exception as e:
+                logger.warning(f"TMDB 查询失败 tmdbid={tmdb_id}：{e}")
+                failed += 1
+                continue
+
+            note["tmdb_status"] = status
+
+            # 应用策略
+            if status in ("Ended", "Canceled"):
+                if self._ended_best_version:
+                    self._apply_ended_strategy(subscribe, note)
+                else:
+                    note["strategy_applied"] = False
+                    self._save_note(subscribe, note)
+            elif status in ("Returning Series", "In Production", "Pilot"):
+                if self._returning_lock_aired:
+                    self._apply_returning_strategy(subscribe, note)
+                else:
+                    note["strategy_applied"] = False
+                    self._save_note(subscribe, note)
+            else:
+                note["strategy_applied"] = False
+                self._save_note(subscribe, note)
+
+            filled += 1
+            logger.info(f"存量补全：订阅 {subscribe.name}（{subscribe.id}）状态：{status}")
+
+        return (f"共 {total} 个订阅，已处理 {filled} 个，跳过 {skipped} 个，失败 {failed} 个")

@@ -20,6 +20,18 @@
       "v0.0.1": "初始版本：UI 精简、自动保存、自动测试、后端三重防护、失败自动切换通知"
     }
   },
+  "SubscribeStatusFiller": {
+    "name": "剧集订阅增强",
+    "description": "根据剧集播出状态自动调整订阅策略：已完结剧下完整剧集包，连载剧只追已播集数",
+    "labels": "订阅,TMDB,系统",
+    "version": "1.0.0",
+    "author": "apple4105",
+    "level": 1,
+    "release": true,
+    "history": {
+      "v1.0.0": "初始版本：监听订阅添加事件，自动从 TMDB 查询媒体状态写入 note 字段"
+    }
+  },
   "CustomAudio": {
     "name": "自定义音频 Provider",
     "description": "注册 custom 音频 provider，所有配置在插件内完成，不依赖系统音频设置。支持 OpenAI Whisper 兼容 STT 和 OpenAI TTS 兼容格式，启用后自动切换系统音频输入/输出 provider。",
