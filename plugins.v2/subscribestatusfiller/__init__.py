@@ -208,7 +208,8 @@ class SubscribeStatusFiller(_PluginBase):
         return []
 
     def get_page(self) -> Optional[List[dict]]:
-        return []
+        """无独立数据页，点击插件卡片直接打开配置表单。"""
+        pass
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
