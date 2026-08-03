@@ -455,7 +455,7 @@ onMounted(() => {
         <VTextField
           v-model="config.output_voice"
           label="语音音色"
-          placeholder="alloy"
+          placeholder="请输入音色名称"
           hint="音色名称，由供应商定义"
           persistent-hint
           density="compact"
