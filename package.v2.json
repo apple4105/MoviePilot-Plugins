@@ -33,16 +33,20 @@
     }
   },
   "CustomAudio": {
-    "name": "自定义音频 Provider",
-    "description": "注册 custom 音频 provider，所有配置在插件内完成，不依赖系统音频设置。支持 OpenAI Whisper 兼容 STT 和 OpenAI TTS 兼容格式，启用后自动切换系统音频输入/输出 provider。",
-    "labels": "Agent,AI,音频,语音",
-    "version": "1.1",
-    "author": "apple4105",
-    "level": 1,
+    "name": "语音识别与合成",
+    "description": "为 MoviePilot Agent 提供语音识别 (ASR) 和语音合成 (TTS) 能力，兼容 OpenAI 接口格式。",
+    "labels": "语音,ASR,TTS,系统",
+    "version": "1.4",
+    "author": "MoviePilot",
+    "level": 2,
     "system_version": ">=2.13.2",
     "release": true,
     "history": {
-      "v1.1": "支持 STT/TTS 独立配置 API Key、Base URL、模型；启用自动切换系统音频 provider，关闭自动恢复；OpenAI Whisper/TTS 兼容格式"
+      "v1.4": "ASR/TTS 测试按钮与区块标题按测试状态动态变色；配置变更后自动重置测试状态",
+      "v1.3": "Base64 API Key 自动解码 + 修复 record_tokens_usage 未记录 failure_count 的 Bug",
+      "v1.2": "新增前端表单强校验（ASR/TTS 启用时必填项非空检查）",
+      "v1.1": "新增语音回复附带文字开关，联动 AUDIO_OUTPUT_INCLUDE_TEXT 系统配置",
+      "v1.0": "初始版本，支持 OpenAI 兼容的 ASR/TTS 接口"
     }
   }
 }
