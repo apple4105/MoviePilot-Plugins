@@ -11,6 +11,7 @@
     "v1.0": "初始版本，支持 OpenAI 兼容的 ASR/TTS 接口",
     "v1.1": "新增语音回复附带文字开关，联动 AUDIO_OUTPUT_INCLUDE_TEXT 系统配置",
     "v1.2": "新增前端表单强校验（ASR/TTS 启用时必填项非空检查）",
-    "v1.3": "Base64 API Key 自动解码 + 修复 record_tokens_usage 未记录 failure_count 的 Bug"
+    "v1.3": "Base64 API Key 自动解码 + 修复 record_tokens_usage 未记录 failure_count 的 Bug",
+    "v1.4": "ASR/TTS 测试按钮与区块标题按测试状态动态变色；配置变更后自动重置测试状态"
   }
 }
