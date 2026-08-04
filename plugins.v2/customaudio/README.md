@@ -55,6 +55,6 @@
 - 支持 Telegram/Discord 语音识别
 - 支持语音回复附带文字
 
-## 许可证
+## License
 
-MIT License
+GPL-3.0
