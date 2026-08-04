@@ -30,7 +30,7 @@ function confirmRefresh() {
 <template>
   <div class="customaudio-page-wrapper">
     <VToolbar density="comfortable" class="sticky-toolbar">
-      <div class="text-h6 ms-3">语音识别与合成</div>
+      <VToolbarTitle class="text-subtitle-1 font-weight-bold">自定义音频 Provider</VToolbarTitle>
       <VSpacer />
       <VBtn icon="mdi-refresh" variant="text" :loading="pageRef?.loading" @click="handleRefresh" />
       <VBtn icon="mdi-content-save" variant="text" color="primary" :loading="pageRef?.saving" @click="pageRef?.saveConfig()" />

@@ -35,7 +35,6 @@ onMounted(() => {
 <template>
   <div class="customaudio-config">
     <VToolbar density="comfortable" color="transparent">
-      <div class="text-h6 ms-3">语音识别与合成配置</div>
       <VSpacer />
       <VBtn icon="mdi-content-save" variant="text" color="primary" @click="saveConfig" />
       <VBtn icon="mdi-close" variant="text" @click="emit('close')" />

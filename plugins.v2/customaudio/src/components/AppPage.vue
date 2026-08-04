@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
 
 const props = defineProps({
   api: {
@@ -39,6 +39,12 @@ const showOutputKey = ref(false)
 const testingTts = ref(false)
 const testingAsr = ref(false)
 
+// 音色试听状态
+const previewing = ref(false)
+const previewText = ref('你好，欢迎试听，这是当前音色的声音效果。')
+const previewAudioUrl = ref('')
+const previewAudioRef = ref(null)
+
 // Base64 解码提示
 const base64Hint = ref({ show: false, text: '', color: 'info' })
 
@@ -67,8 +73,14 @@ const languageOptions = [
   { title: '한국어', value: 'ko' },
 ]
 
-function showNotice(text, type = 'success') {
+// 顶部提示（带自动消失）
+let noticeTimer = null
+function showNotice(text, type = 'success', duration = 4000) {
+  if (noticeTimer) clearTimeout(noticeTimer)
   notice.value = { show: true, text, type }
+  noticeTimer = setTimeout(() => {
+    notice.value.show = false
+  }, duration)
 }
 
 // 显示 Base64 解码提示（带自动消失）
@@ -279,6 +291,52 @@ async function testAsr() {
   }
 }
 
+// Base64 转 Blob，用于播放试听音频
+function base64ToBlob(base64, mimeType) {
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return new Blob([bytes], { type: mimeType || 'audio/mpeg' })
+}
+
+// 试听当前音色
+async function previewVoice() {
+  const text = previewText.value.trim()
+  if (!text) {
+    showNotice('请输入试听文本', 'error')
+    return
+  }
+  previewing.value = true
+  try {
+    const payload = {
+      output_api_key: config.value.output_api_key,
+      output_base_url: config.value.output_base_url,
+      output_model: config.value.output_model,
+      output_voice: config.value.output_voice,
+      text,
+    }
+    const res = await props.api.post('plugin/CustomAudio/preview_voice', payload)
+    if (res?.success && res?.data?.audio_base64) {
+      if (previewAudioUrl.value) {
+        URL.revokeObjectURL(previewAudioUrl.value)
+      }
+      const blob = base64ToBlob(res.data.audio_base64, res.data.content_type)
+      previewAudioUrl.value = URL.createObjectURL(blob)
+      await nextTick()
+      previewAudioRef.value?.play().catch(() => {})
+      showNotice('试听音频已生成')
+    } else {
+      showNotice(res?.message || '试听失败', 'error')
+    }
+  } catch {
+    showNotice('试听失败，请检查网络和配置', 'error')
+  } finally {
+    previewing.value = false
+  }
+}
+
 defineExpose({ loadStatus, saveConfig, getConfig, hasUnsavedChanges, loading, saving })
 
 onMounted(() => {
@@ -289,7 +347,7 @@ onMounted(() => {
 <template>
   <div class="customaudio-app-page pa-4">
     <!-- 标题 -->
-    <div v-if="!hideTitle" class="text-h5 mb-4">语音识别与合成</div>
+    <div v-if="!hideTitle" class="text-h5 mb-4">自定义音频 Provider</div>
 
     <!-- 本地提示（不触发全局 Toast） -->
     <VAlert
@@ -349,7 +407,20 @@ onMounted(() => {
 
     <!-- ASR 配置 -->
     <template v-if="config.enabled_input">
-    <div class="text-subtitle-1 font-weight-bold mb-3">语音识别 (ASR / STT)</div>
+    <div class="d-flex justify-space-between align-center mb-3">
+      <div class="text-subtitle-1 font-weight-bold">语音识别 (ASR / STT)</div>
+      <VBtn
+        color="info"
+        variant="tonal"
+        size="small"
+        :loading="testingAsr"
+        :disabled="!config.input_api_key || !config.input_base_url"
+        prepend-icon="mdi-microphone"
+        @click="testAsr"
+      >
+        测试 ASR 连接
+      </VBtn>
+    </div>
     <VRow>
       <VCol cols="12" sm="6">
         <VTextField
@@ -395,19 +466,6 @@ onMounted(() => {
         />
       </VCol>
     </VRow>
-    <div class="d-flex justify-end mb-4">
-      <VBtn
-        color="info"
-        variant="tonal"
-        size="small"
-        :loading="testingAsr"
-        :disabled="!config.input_api_key || !config.input_base_url"
-        prepend-icon="mdi-microphone"
-        @click="testAsr"
-      >
-        测试 ASR 连接
-      </VBtn>
-    </div>
 
     </template>
 
@@ -415,7 +473,20 @@ onMounted(() => {
 
     <!-- TTS 配置 -->
     <template v-if="config.enabled_output">
-    <div class="text-subtitle-1 font-weight-bold mb-3">语音合成 (TTS)</div>
+    <div class="d-flex justify-space-between align-center mb-3">
+      <div class="text-subtitle-1 font-weight-bold">语音合成 (TTS)</div>
+      <VBtn
+        color="info"
+        variant="tonal"
+        size="small"
+        :loading="testingTts"
+        :disabled="!config.output_api_key || !config.output_base_url"
+        prepend-icon="mdi-speaker"
+        @click="testTts"
+      >
+        测试 TTS 连接
+      </VBtn>
+    </div>
     <VRow>
       <VCol cols="12" sm="6">
         <VTextField
@@ -463,30 +534,39 @@ onMounted(() => {
         />
       </VCol>
     </VRow>
-    <div class="d-flex justify-end mb-4">
-      <VBtn
-        color="info"
-        variant="tonal"
-        size="small"
-        :loading="testingTts"
-        :disabled="!config.output_api_key || !config.output_base_url"
-        prepend-icon="mdi-speaker"
-        @click="testTts"
-      >
-        测试 TTS 连接
-      </VBtn>
-    </div>
 
-    <!-- 语音回复附带文字 -->
-    <VSwitch
-      v-model="config.audio_reply_with_text"
-      label="语音回复附带文字"
-      color="primary"
-      hint="开启后，Telegram 等渠道发送语音回复时将同时附带文字消息内容"
-      persistent-hint
-      hide-details
-      class="mb-2"
-    />
+    <!-- 语音回复附带文字 + 音色试听 -->
+    <VRow class="align-center mb-2">
+      <VCol cols="12" sm="6">
+        <VSwitch
+          v-model="config.audio_reply_with_text"
+          label="语音回复附带文字"
+          color="primary"
+          hint="开启后，Telegram 等渠道发送语音回复时将同时附带文字消息内容"
+          persistent-hint
+          hide-details
+        />
+      </VCol>
+      <VCol cols="12" sm="6" class="d-flex align-center ga-3">
+        <audio
+          ref="previewAudioRef"
+          :src="previewAudioUrl"
+          controls
+          style="height: 40px; width: 260px; flex: 0 0 260px;"
+        />
+        <VBtn
+          color="primary"
+          variant="tonal"
+          size="small"
+          :loading="previewing"
+          :disabled="!config.output_api_key || !config.output_base_url || !config.output_voice"
+          prepend-icon="mdi-headphones"
+          @click="previewVoice"
+        >
+          试听音色
+        </VBtn>
+      </VCol>
+    </VRow>
     </template>
   </div>
 </template>

@@ -357,6 +357,13 @@ class CustomAudio(_PluginBase):
                 "auth": "bear",
                 "summary": "测试 ASR 连接",
             },
+            {
+                "path": "/preview_voice",
+                "endpoint": self.preview_voice_api,
+                "methods": ["POST"],
+                "auth": "bear",
+                "summary": "试听 TTS 音色",
+            },
         ]
 
     async def get_config_api(self, request: Request):
@@ -592,6 +599,63 @@ class CustomAudio(_PluginBase):
         except Exception as err:
             logger.error(f"ASR 测试异常: {err}")
             return {"success": False, "message": f"测试失败: {err}"}
+
+    async def preview_voice_api(self, request: Request):
+        """使用当前 TTS 配置合成一句试听音频，返回 Base64 音频数据供前端播放。"""
+        try:
+            try:
+                data = await request.json()
+            except Exception:
+                return {"success": False, "message": "请求数据解析失败"}
+
+            api_key = data.get("output_api_key", "")
+            base_url = data.get("output_base_url", "")
+            model = data.get("output_model", "")
+            voice = data.get("output_voice", "")
+            text = (data.get("text") or "").strip() or "你好，欢迎试听，这是当前音色的声音效果。"
+
+            if not api_key or not base_url:
+                return {"success": False, "message": "API Key 和 Base URL 不能为空"}
+            if not voice:
+                return {"success": False, "message": "音色名称不能为空"}
+
+            # 试听统一使用 mp3 格式，浏览器兼容性最好
+            response = RequestUtils(
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                proxies=settings.PROXY or {},
+                timeout=30,
+            ).post_res(
+                url=base_url,
+                json={
+                    "model": model,
+                    "voice": voice,
+                    "input": text,
+                    "response_format": "mp3",
+                },
+                raise_exception=True,
+            )
+            if response.status_code >= 400:
+                return {"success": False, "message": f"HTTP {response.status_code}: {response.text[:300]}"}
+            if not response.content:
+                return {"success": False, "message": "响应中未包含音频数据"}
+
+            import base64 as _b64
+
+            return {
+                "success": True,
+                "data": {
+                    "audio_base64": _b64.b64encode(response.content).decode("utf-8"),
+                    "content_type": "audio/mpeg",
+                    "length": len(response.content),
+                },
+                "message": "试听音频生成成功",
+            }
+        except Exception as err:
+            logger.error(f"试听音色异常: {err}")
+            return {"success": False, "message": f"试听失败: {err}"}
 
     def get_service(self):
         return []
