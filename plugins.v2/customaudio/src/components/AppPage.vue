@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, onMounted, ref } from 'vue'
+import { nextTick, onMounted, ref, watch } from 'vue'
 
 const props = defineProps({
   api: {
@@ -38,6 +38,10 @@ const showOutputKey = ref(false)
 // 测试中状态
 const testingTts = ref(false)
 const testingAsr = ref(false)
+
+// 测试结果状态：idle 未测试（蓝）/ success 成功（绿）/ error 失败（红）
+const asrTestState = ref('idle')
+const ttsTestState = ref('idle')
 
 // 音色试听状态
 const previewing = ref(false)
@@ -257,11 +261,14 @@ async function testTts() {
     }
     const res = await props.api.post('plugin/CustomAudio/test_tts', ttsData)
     if (res?.success) {
+      ttsTestState.value = 'success'
       showNotice(res?.message || 'TTS 连接成功')
     } else {
+      ttsTestState.value = 'error'
       showNotice(res?.message || 'TTS 连接失败', 'error')
     }
   } catch {
+    ttsTestState.value = 'error'
     showNotice('TTS 连接失败，请检查网络和配置', 'error')
   } finally {
     testingTts.value = false
@@ -280,16 +287,44 @@ async function testAsr() {
     }
     const res = await props.api.post('plugin/CustomAudio/test_asr', asrData)
     if (res?.success) {
+      asrTestState.value = 'success'
       showNotice(res?.message || 'ASR 连接成功')
     } else {
+      asrTestState.value = 'error'
       showNotice(res?.message || 'ASR 连接失败', 'error')
     }
   } catch {
+    asrTestState.value = 'error'
     showNotice('ASR 连接失败，请检查网络和配置', 'error')
   } finally {
     testingAsr.value = false
   }
 }
+
+// 配置字段变化时重置测试状态（旧的测试结果不再有效）
+watch(
+  () => [
+    config.value.input_api_key,
+    config.value.input_base_url,
+    config.value.input_model,
+    config.value.input_language,
+  ],
+  () => {
+    asrTestState.value = 'idle'
+  }
+)
+
+watch(
+  () => [
+    config.value.output_api_key,
+    config.value.output_base_url,
+    config.value.output_model,
+    config.value.output_voice,
+  ],
+  () => {
+    ttsTestState.value = 'idle'
+  }
+)
 
 // Base64 转 Blob，用于播放试听音频
 function base64ToBlob(base64, mimeType) {
@@ -408,9 +443,12 @@ onMounted(() => {
     <!-- ASR 配置 -->
     <template v-if="config.enabled_input">
     <div class="d-flex justify-space-between align-center mb-3">
-      <div class="text-subtitle-1 font-weight-bold">语音识别 (ASR / STT)</div>
+      <div
+        class="text-subtitle-1 font-weight-bold"
+        :class="asrTestState === 'success' ? 'text-success' : asrTestState === 'error' ? 'text-error' : ''"
+      >语音识别 (ASR / STT)</div>
       <VBtn
-        color="info"
+        :color="asrTestState === 'success' ? 'success' : asrTestState === 'error' ? 'error' : 'info'"
         variant="tonal"
         size="small"
         :loading="testingAsr"
@@ -474,9 +512,12 @@ onMounted(() => {
     <!-- TTS 配置 -->
     <template v-if="config.enabled_output">
     <div class="d-flex justify-space-between align-center mb-3">
-      <div class="text-subtitle-1 font-weight-bold">语音合成 (TTS)</div>
+      <div
+        class="text-subtitle-1 font-weight-bold"
+        :class="ttsTestState === 'success' ? 'text-success' : ttsTestState === 'error' ? 'text-error' : ''"
+      >语音合成 (TTS)</div>
       <VBtn
-        color="info"
+        :color="ttsTestState === 'success' ? 'success' : ttsTestState === 'error' ? 'error' : 'info'"
         variant="tonal"
         size="small"
         :loading="testingTts"
