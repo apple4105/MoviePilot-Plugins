@@ -1,0 +1,32 @@
+{
+  "name": "SubscribeStatusFiller",
+  "version": "1.0.0",
+  "description": "根据剧集播出状态自动调整订阅策略：已完结剧下完整剧集包，连载剧只追已播集数",
+  "icon": "mdi-television-classic",
+  "author": "apple4105",
+  "level": 1,
+  "license": "GPL-3.0",
+  "homepage": "",
+  "tags": "订阅, 连载, 状态管理",
+  "v2": true,
+  "route": "/subscribe_status_filler",
+  "page": {
+    "route": "/subscribe_status_filler",
+    "name": "连载剧订阅状态",
+    "icon": "mdi-television-classic",
+    "component": "V2PluginPage"
+  },
+  "plugin": {
+    "id": "SubscribeStatusFiller",
+    "name": "剧集订阅增强",
+    "version": "1.0.0",
+    "description": "根据剧集播出状态自动调整订阅策略：已完结剧下完整剧集包，连载剧只追已播集数",
+    "author": "apple4105",
+    "icon": "mdi-television-classic",
+    "license": "GPL-3.0",
+    "level": 1,
+    "tags": "订阅, 连载, 状态管理",
+    "route": "/subscribe_status_filler",
+    "v2": true
+  }
+}
