@@ -29,7 +29,7 @@ class SubscribeStatusFiller(_PluginBase):
     # 插件描述
     plugin_desc = "根据剧集播出状态自动调整订阅策略：已完结剧下完整剧集包，连载剧只追已播集数"
     # 插件版本
-    plugin_version = "1.0.0"
+    plugin_version = "1.1"
     # 插件作者
     plugin_author = "apple4105"
     # 作者主页
@@ -535,6 +535,19 @@ class SubscribeStatusFiller(_PluginBase):
             logger.warning(f"查询已播集数失败 tmdbid={tmdb_id} season={season}：{e}")
             return None
 
+    def _get_scheduled_count(self, tmdb_id: int, season: int) -> Optional[int]:
+        """
+        查询某季排期总集数（含未播出集数），查询失败返回 None
+        """
+        try:
+            episodes = self.tmdbchain.tmdb_episodes(tmdbid=tmdb_id, season=season)
+            if not episodes:
+                return None
+            return len(episodes)
+        except Exception as e:
+            logger.warning(f"查询排期总集数失败 tmdbid={tmdb_id} season={season}：{e}")
+            return None
+
     def _get_start_episode(self, subscribe_id: int) -> int:
         """
         获取订阅生效的起始集数（优先按订阅覆盖值，默认 1）
@@ -584,6 +597,7 @@ class SubscribeStatusFiller(_PluginBase):
                 "name": sub.name or "",
                 "season": sub.season,
                 "status": status,
+                "total_episodes": self._get_scheduled_count(sub.tmdbid, sub.season),
                 "total_episode": total,
                 "lack_episode": lack,
                 # 连载剧已锁定 total_episode 为已播集数，起始集数上限取 total+1

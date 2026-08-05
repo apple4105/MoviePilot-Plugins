@@ -16,12 +16,16 @@ defineProps({
     default: false,
   },
 })
-const emit = defineEmits(['action', 'switch', 'close'])
+const emit = defineEmits(['action', 'switch'])
 
 const pageRef = ref(null)
 
 function handleRefresh() {
   pageRef.value?.loadSubscribes(true)
+}
+
+function handleSettings() {
+  pageRef.value?.openSettings?.()
 }
 </script>
 
@@ -31,7 +35,7 @@ function handleRefresh() {
       <VToolbarTitle class="text-subtitle-1 font-weight-bold">连载剧订阅状态</VToolbarTitle>
       <VSpacer />
       <VBtn icon="mdi-refresh" variant="text" :loading="pageRef?.loading" @click="handleRefresh" />
-      <VBtn icon="mdi-close" variant="text" @click="emit('close')" />
+      <VBtn icon="mdi-cog-outline" variant="text" @click="handleSettings" />
     </VToolbar>
     <VDivider />
 

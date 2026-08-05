@@ -1,5 +1,6 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import SettingsForm from './Config.vue'
 
 const props = defineProps({
   api: {
@@ -17,6 +18,7 @@ const props = defineProps({
 })
 
 const loading = ref(false)
+const settingsDialog = ref(false)
 const savingId = ref(null)
 const notice = ref({ show: false, text: '', type: 'success' })
 const subscribes = ref([])
@@ -115,7 +117,25 @@ async function saveStartEpisode(sub) {
   }
 }
 
-onMounted(() => loadSubscribes())
+function openSettings() {
+  settingsDialog.value = true
+}
+
+function onSettingsSaved() {
+  settingsDialog.value = false
+  loadSubscribes()
+}
+
+defineExpose({
+  loadSubscribes,
+  openSettings,
+  get loading() { return loading },
+  get saving() { return savingId.value !== null },
+})
+
+onMounted(() => {
+  loadSubscribes()
+})
 </script>
 
 <template>
@@ -136,6 +156,7 @@ onMounted(() => loadSubscribes())
           <th>剧集</th>
           <th class="text-center">季</th>
           <th class="text-center">状态</th>
+          <th class="text-center">总集数</th>
           <th class="text-center">已播</th>
           <th class="text-center">缺失</th>
           <th class="text-center" style="width: 150px">起始集数</th>
@@ -157,6 +178,7 @@ onMounted(() => loadSubscribes())
               {{ statusInfo(sub.status).text }}
             </VChip>
           </td>
+          <td class="text-center">{{ sub.total_episodes ?? '暂无' }}</td>
           <td class="text-center">{{ sub.aired ?? '-' }}</td>
           <td class="text-center">{{ sub.lack_episode ?? '-' }}</td>
           <td class="text-center">
@@ -184,12 +206,32 @@ onMounted(() => loadSubscribes())
           </td>
         </tr>
         <tr v-if="!loading && subscribes.length === 0">
-          <td colspan="7" class="text-center text-medium-emphasis py-6">
+          <td colspan="8" class="text-center text-medium-emphasis py-6">
             暂无连载剧订阅，或插件尚未启用
           </td>
         </tr>
       </tbody>
     </VTable>
+
+    <VDialog v-model="settingsDialog" max-width="720">
+      <VCard>
+        <VCardTitle class="d-flex align-center">
+          插件设置
+          <VSpacer />
+          <VBtn icon variant="text" @click="settingsDialog = false">
+            <VIcon>mdi-close</VIcon>
+          </VBtn>
+        </VCardTitle>
+        <VCardText class="pa-0">
+          <SettingsForm
+            :api="api"
+            :plugin-id="pluginId"
+            @save="onSettingsSaved"
+            @close="settingsDialog = false"
+          />
+        </VCardText>
+      </VCard>
+    </VDialog>
   </div>
 </template>
 

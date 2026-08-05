@@ -1,11 +1,15 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 const props = defineProps({
   api: { type: Object, default: () => ({}) },
   initialConfig: { type: Object, default: () => ({}) },
+  pluginId: { type: String, default: '' },
 })
 const emit = defineEmits(['save', 'close'])
+
+// 兼容两种传入方式：插件详情页通过 api.pluginId 传入，侧栏页面通过独立 pluginId prop 传入
+const effectivePluginId = computed(() => props.pluginId || props.api?.pluginId || '')
 
 const saving = ref(false)
 const notice = ref({ show: false, text: '', type: 'success' })
@@ -15,13 +19,14 @@ const config = ref({
   overwrite: true,
   ended_best_version: true,
   returning_lock_aired: true,
+  show_sidebar: true,
   check_interval: 6,
 })
 
 onMounted(async () => {
-  if (props.api?.get && props.api.pluginId) {
+  if (props.api?.get && effectivePluginId.value) {
     try {
-      const res = await props.api.get(`plugin/${props.api.pluginId}/config`)
+      const res = await props.api.get(`plugin/${effectivePluginId.value}/config`)
       if (res?.config) {
         config.value = { ...config.value, ...res.config }
       }
@@ -44,9 +49,9 @@ function showNotice(text, type = 'success') {
 async function handleSave() {
   saving.value = true
   try {
-    if (props.api?.post && props.api.pluginId) {
+    if (props.api?.post && effectivePluginId.value) {
       const res = await props.api.post(
-        `plugin/${props.api.pluginId}/config`,
+        `plugin/${effectivePluginId.value}/config`,
         config.value,
       )
       if (res?.success) {
