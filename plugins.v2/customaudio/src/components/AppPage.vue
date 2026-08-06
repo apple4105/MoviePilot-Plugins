@@ -372,9 +372,99 @@ async function previewVoice() {
   }
 }
 
+// 联邦加载环境下外部 CSS 文件不会被自动加载，此处运行时注入关键样式
+function injectCustomAudioStyles() {
+  if (document.getElementById('customaudio-injected-styles')) return
+  const style = document.createElement('style')
+  style.id = 'customaudio-injected-styles'
+  style.textContent = `
+    .ca-form-label {
+      width: 85px;
+      flex-shrink: 0;
+      font-size: 0.875rem;
+      line-height: 40px;
+      color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+      padding-right: 12px;
+    }
+    .ca-form-item {
+      width: 100%;
+      display: flex;
+      align-items: flex-start;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+    }
+    .ca-form-item:last-child {
+      border-bottom: none;
+    }
+    .ca-form-item--merged {
+      gap: 8px;
+      padding: 10px 0;
+      align-items: flex-start;
+    }
+    .ca-form-item__half {
+      flex: 1;
+      display: flex;
+      align-items: flex-start;
+      min-width: 0;
+    }
+    .ca-form-item__half .ca-form-label {
+      width: 85px;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    @media (min-width: 601px) {
+      .ca-form-item__half:first-child {
+        flex: 1.2;
+      }
+      .ca-form-item__half:last-child .ca-form-label {
+        width: auto;
+      }
+    }
+    .ca-form-item__half > .v-input {
+      flex: 1;
+      min-width: 0;
+    }
+    @media (max-width: 600px) {
+      .ca-form-item--merged {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 4px;
+      }
+      .ca-form-item__half {
+        flex: none;
+        width: 100%;
+      }
+    }
+    .ca-input-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+      min-width: 0;
+    }
+    .ca-input-group > .v-input {
+      flex: 1;
+      min-width: 0;
+    }
+    .ca-input-action-btn {
+      flex-shrink: 0;
+      min-width: 36px !important;
+      min-height: 36px !important;
+      border-radius: 6px;
+      background: rgba(var(--v-theme-on-surface), 0.04);
+    }
+    :deep(.ca-key-field .v-field__input) {
+      min-width: 0;
+      text-overflow: ellipsis;
+    }
+  `
+  document.head.appendChild(style)
+}
+
 defineExpose({ loadStatus, saveConfig, getConfig, hasUnsavedChanges, loading, saving })
 
 onMounted(() => {
+  injectCustomAudioStyles()
   loadStatus(false)
 })
 </script>
@@ -459,51 +549,61 @@ onMounted(() => {
         测试 ASR 连接
       </VBtn>
     </div>
-    <VRow>
-      <VCol cols="12" sm="6">
+    <div class="ca-form-item ca-form-item--merged">
+      <div class="ca-form-item__half">
+        <span class="ca-form-label">API 地址</span>
         <VTextField
           v-model="config.input_base_url"
-          label="API 地址"
           placeholder="https://api.openai.com/v1"
           hint="兼容 OpenAI 格式的 ASR 接口地址"
           persistent-hint
           density="compact"
           variant="outlined"
         />
-      </VCol>
-      <VCol cols="12" sm="6">
+      </div>
+      <div class="ca-form-item__half">
+        <span class="ca-form-label">模型</span>
         <VTextField
           v-model="config.input_model"
-          label="模型"
           placeholder="whisper-1"
           density="compact"
           variant="outlined"
         />
-      </VCol>
-      <VCol cols="12" sm="6">
+      </div>
+    </div>
+    <div class="ca-form-item">
+      <span class="ca-form-label">API Key</span>
+      <div class="ca-input-group">
         <VTextField
           v-model="config.input_api_key"
           :type="showInputKey ? 'text' : 'password'"
-          label="API Key"
           placeholder="sk-..."
           density="compact"
           variant="outlined"
-          :append-inner-icon="showInputKey ? 'mdi-eye-off' : 'mdi-eye'"
-          @click:append-inner="showInputKey = !showInputKey"
+          hide-details
+          class="ca-key-field"
           @blur="tryDecodeBase64Key('input')"
           @paste="() => setTimeout(() => tryDecodeBase64Key('input'), 50)"
         />
-      </VCol>
-      <VCol cols="12" sm="6">
-        <VSelect
-          v-model="config.input_language"
-          :items="languageOptions"
-          label="识别语言"
-          density="compact"
-          variant="outlined"
+        <VBtn
+          v-if="config.input_api_key"
+          :icon="showInputKey ? 'mdi-eye-off' : 'mdi-eye'"
+          size="small"
+          variant="tonal"
+          class="ca-input-action-btn"
+          @click.stop="showInputKey = !showInputKey"
         />
-      </VCol>
-    </VRow>
+      </div>
+    </div>
+    <div class="ca-form-item">
+      <span class="ca-form-label">识别语言</span>
+      <VSelect
+        v-model="config.input_language"
+        :items="languageOptions"
+        density="compact"
+        variant="outlined"
+      />
+    </div>
 
     </template>
 
@@ -528,53 +628,63 @@ onMounted(() => {
         测试 TTS 连接
       </VBtn>
     </div>
-    <VRow>
-      <VCol cols="12" sm="6">
+    <div class="ca-form-item ca-form-item--merged">
+      <div class="ca-form-item__half">
+        <span class="ca-form-label">API 地址</span>
         <VTextField
           v-model="config.output_base_url"
-          label="API 地址"
           placeholder="https://api.openai.com/v1"
           hint="兼容 OpenAI 格式的 TTS 接口地址"
           persistent-hint
           density="compact"
           variant="outlined"
         />
-      </VCol>
-      <VCol cols="12" sm="6">
+      </div>
+      <div class="ca-form-item__half">
+        <span class="ca-form-label">模型</span>
         <VTextField
           v-model="config.output_model"
-          label="模型"
           placeholder="tts-1"
           density="compact"
           variant="outlined"
         />
-      </VCol>
-      <VCol cols="12" sm="6">
+      </div>
+    </div>
+    <div class="ca-form-item">
+      <span class="ca-form-label">API Key</span>
+      <div class="ca-input-group">
         <VTextField
           v-model="config.output_api_key"
           :type="showOutputKey ? 'text' : 'password'"
-          label="API Key"
           placeholder="sk-..."
           density="compact"
           variant="outlined"
-          :append-inner-icon="showOutputKey ? 'mdi-eye-off' : 'mdi-eye'"
-          @click:append-inner="showOutputKey = !showOutputKey"
+          hide-details
+          class="ca-key-field"
           @blur="tryDecodeBase64Key('output')"
           @paste="() => setTimeout(() => tryDecodeBase64Key('output'), 50)"
         />
-      </VCol>
-      <VCol cols="12" sm="6">
-        <VTextField
-          v-model="config.output_voice"
-          label="语音音色"
-          placeholder="请输入音色名称"
-          hint="音色名称，由供应商定义"
-          persistent-hint
-          density="compact"
-          variant="outlined"
+        <VBtn
+          v-if="config.output_api_key"
+          :icon="showOutputKey ? 'mdi-eye-off' : 'mdi-eye'"
+          size="small"
+          variant="tonal"
+          class="ca-input-action-btn"
+          @click.stop="showOutputKey = !showOutputKey"
         />
-      </VCol>
-    </VRow>
+      </div>
+    </div>
+    <div class="ca-form-item">
+      <span class="ca-form-label">语音音色</span>
+      <VTextField
+        v-model="config.output_voice"
+        placeholder="请输入音色名称"
+        hint="音色名称，由供应商定义"
+        persistent-hint
+        density="compact"
+        variant="outlined"
+      />
+    </div>
 
     <!-- 语音回复附带文字 + 音色试听 -->
     <VRow class="align-center mb-2">
