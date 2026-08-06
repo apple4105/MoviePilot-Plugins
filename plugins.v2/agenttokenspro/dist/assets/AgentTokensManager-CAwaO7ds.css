@@ -11,8 +11,19 @@
 }
 
 /* Vuetify VTable 内部滚动容器 */
+.provider-table-scroll[data-v-92d60609] .v-table__wrapper {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
 
 /* 强制消除 Vuetify 卡片及容器宽度与边距限制 */
+[data-v-92d60609] .v-card,[data-v-92d60609] .v-card__text,[data-v-92d60609] .v-card__body,[data-v-92d60609] .v-data-table,[data-v-92d60609] .v-data-table__wrapper {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
 
 /* 表格撑满容器宽度，窄屏时通过 min-width 保证横向滚动 */
 .provider-table-scroll[data-v-92d60609] table {
@@ -23,6 +34,11 @@
 }
 
 /* 确保表格横向完全铺满 */
+[data-v-92d60609] .v-table,[data-v-92d60609] .v-data-table > .v-table__wrapper > table {
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
+}
 .provider-table-scroll[data-v-92d60609] table,
 .provider-table-scroll[data-v-92d60609] tr,
 .provider-table-scroll[data-v-92d60609] th,
@@ -227,52 +243,71 @@
 }
 
 /* Label 固定宽度 */
-.form-label[data-v-a67c57ef] {
-  width: 95px;
+.form-label[data-v-570f5906] {
+  width: 85px;
   flex-shrink: 0;
   font-size: 0.875rem;
   color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
-  padding-right: 12px;
+  padding-right: 20px;
+  white-space: nowrap;
 }
 
 /* 表单项容器：底部边框贯穿全宽 */
-.form-item[data-v-a67c57ef] {
+.form-item[data-v-570f5906] {
   width: 100%;
   display: flex;
   align-items: center;
   padding: 10px 0;
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
 }
-.form-item[data-v-a67c57ef]:last-child {
+.form-item[data-v-570f5906]:last-child {
   border-bottom: none;
 }
 
 /* 合并行（Token 额度 + 初始已用） */
-.form-item--merged[data-v-a67c57ef] {
+.form-item--merged[data-v-570f5906] {
   gap: 12px;
   padding: 10px 0;
 }
-.form-item__half[data-v-a67c57ef] {
+.form-item__half[data-v-570f5906] {
   flex: 1;
   display: flex;
   align-items: center;
+  gap: 4px;
   min-width: 0;
 }
-.form-item__half .form-label[data-v-a67c57ef] {
-  width: 80px;
+.form-item__half .form-label[data-v-570f5906] {
+  width: 120px;
   flex-shrink: 0;
+  font-size: 0.875rem;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  padding-right: 0;
+  text-align: right;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-sizing: border-box;
+}
+.form-item__half[data-v-570f5906] >  .v-input {
+  flex: 0 1 200px;
+  min-width: 0;
 }
 
+
+
 /* 输入框 + 图标按钮组合 */
-.input-group[data-v-a67c57ef] {
+.input-group[data-v-570f5906] {
   display: flex;
   align-items: center;
   gap: 8px;
   flex: 1;
   min-width: 0;
 }
-.input-action-btn[data-v-a67c57ef] {
+.input-group > .v-input[data-v-570f5906] {
+  flex: 1;
+  min-width: 0;
+}
+.input-action-btn[data-v-570f5906] {
   flex-shrink: 0;
   min-width: 36px !important;
   min-height: 36px !important;
@@ -281,21 +316,67 @@
 }
 
 /* 防止移动端图标被挤出屏幕 */
-[data-v-a67c57ef] .icon-shrink {
+[data-v-570f5906] .icon-shrink {
   flex-shrink: 0 !important;
+}
+[data-v-570f5906] .apikey-field .v-field__append-inner,[data-v-570f5906] .model-combobox .v-field__append-inner {
+  min-width: 0;
+}
+[data-v-570f5906] .apikey-field .v-field__input,[data-v-570f5906] .model-combobox .v-field__input {
+  min-width: 0;
+  text-overflow: ellipsis;
 }
 
 /* 移动端弹窗优化 */
 @media (max-width: 768px) {
+[data-v-570f5906] .v-dialog {
+    width: 92vw !important;
+    max-width: 92vw !important;
+    margin: 0 auto;
+}
+[data-v-570f5906] .v-card {
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+}
+[data-v-570f5906] .v-card-title {
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+    padding-left: 12px !important;
+    padding-right: 8px !important;
+    font-size: 1rem !important;
+    flex-shrink: 0;
+    gap: 4px;
+}
+[data-v-570f5906] .v-card-text {
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+[data-v-570f5906] .v-card-actions {
+    padding: 8px 12px !important;
+    flex-shrink: 0;
+    position: sticky;
+    bottom: 0;
+    background: rgb(var(--v-theme-surface));
+    border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+[data-v-570f5906] .v-input {
+    margin-bottom: 4px;
+}
 
   /* 移动端 Label 宽度缩小 */
-.form-label[data-v-a67c57ef] {
+.form-label[data-v-570f5906] {
     width: 72px;
     font-size: 0.8rem;
     padding-right: 8px;
 }
-.form-item__half .form-label[data-v-a67c57ef] {
-    width: 60px;
+.form-item__half .form-label[data-v-570f5906] {
+    width: 80px;
     white-space: nowrap;
 }
 }
@@ -311,15 +392,38 @@
 }
 
 /* 强制消除 Vuetify 卡片及容器宽度与边距限制 */
+[data-v-feffb9a8] .v-card,[data-v-feffb9a8] .v-card__text,[data-v-feffb9a8] .v-card__body {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
 
 /* Vuetify wrapper 不自行滚动，由 .provider-table-scroll 统一管理滚动 */
+[data-v-feffb9a8] .v-table__wrapper,[data-v-feffb9a8] .v-data-table__wrapper {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  overflow: visible !important;
+  max-height: none !important;
+}
 
 /* 确保表格横向铺满，但允许 min-width 触发横向溢出 */
+[data-v-feffb9a8] .v-table,[data-v-feffb9a8] .v-data-table > .v-table__wrapper > table,[data-v-feffb9a8] table {
+  width: 100% !important;
+}
 .provider-table-scroll[data-v-feffb9a8] {
   overflow-x: auto !important;
   overflow-y: visible !important;
   position: relative;
   -webkit-overflow-scrolling: touch;
+}
+.provider-table-scroll[data-v-feffb9a8] .v-table__wrapper {
+  overflow: visible !important;
+  max-height: none !important;
 }
 .provider-table-scroll[data-v-feffb9a8] table {
   min-width: 1000px !important;
@@ -666,6 +770,10 @@
 }
 
   /* 进度条间距优化 */
+[data-v-435e5c32] .usage-overview-card__body .v-progress-linear {
+    margin-block: 8px !important;
+    height: 6px !important;
+}
 
   /* 底部元信息两端对齐 */
 .usage-overview-card__meta[data-v-435e5c32] {
@@ -699,14 +807,28 @@
 }
 
 /* 强制消除 Vuetify 卡片及容器宽度与边距限制 */
+[data-v-0eec1d3a] .v-card,[data-v-0eec1d3a] .v-card__text,[data-v-0eec1d3a] .v-card__body,[data-v-0eec1d3a] .v-table__wrapper,[data-v-0eec1d3a] .v-data-table,[data-v-0eec1d3a] .v-data-table__wrapper {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
 
 /* 确保表格横向完全铺满 */
+[data-v-0eec1d3a] .v-table,[data-v-0eec1d3a] .v-data-table > .v-table__wrapper > table,[data-v-0eec1d3a] table {
+  width: 100% !important;
+  max-width: 100% !important;
+}
 .vendor-table-scroll[data-v-0eec1d3a] {
   overflow-x: auto !important;
   -webkit-overflow-scrolling: touch;
 }
 
 /* Vuetify VTable 内部滚动容器 */
+.vendor-table-scroll[data-v-0eec1d3a] .v-table__wrapper {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
 
 /* 表格撑满容器宽度 */
 .vendor-table-scroll[data-v-0eec1d3a] table {
@@ -777,6 +899,11 @@
 }
 
 /* 名称列编辑态：VTextField 撑满列宽 */
+.vendor-table-scroll[data-v-0eec1d3a] .name-col .v-text-field,
+.vendor-table-scroll[data-v-0eec1d3a] .url-col .v-text-field {
+  width: 100% !important;
+  max-width: 100% !important;
+}
 
 /* API 地址列：自动填充剩余空间，但限制最大宽度 */
 .vendor-table-scroll[data-v-0eec1d3a] .url-col {
@@ -799,6 +926,9 @@
 }
 
 /* 操作列内部按钮不压缩 */
+.vendor-table-scroll[data-v-0eec1d3a] .action-col .v-btn {
+  flex-shrink: 0;
+}
 .url-text[data-v-0eec1d3a] {
   display: block;
   overflow: hidden;
@@ -957,10 +1087,35 @@
 }
 
 /* 强制消除 Vuetify 卡片及容器宽度与边距限制 */
+[data-v-7625d539] .v-sheet,[data-v-7625d539] .v-card,[data-v-7625d539] .v-card__text,[data-v-7625d539] .v-card__body {
+  width: 100% !important;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
 
 /* VWindow / VWindowItem 全链路宽度穿透 */
+[data-v-7625d539] .v-window,[data-v-7625d539] .v-window__container {
+  width: 100% !important;
+  max-width: none !important;
+  overflow: visible !important;
+}
+[data-v-7625d539] .v-window-item {
+  width: 100% !important;
+  max-width: none !important;
+  overflow: visible !important;
+  flex: 1 1 100% !important;
+}
+[data-v-7625d539] .v-window-item > * {
+  width: 100% !important;
+  max-width: 100% !important;
+  flex: 1 1 auto !important;
+}
 
 /* 确保表格横向完全铺满 */
+[data-v-7625d539] .v-table,[data-v-7625d539] table {
+  width: 100% !important;
+}
 .agenttokens-tabs-row[data-v-7625d539] {
   display: flex;
   align-items: center;
@@ -968,6 +1123,10 @@
   flex-wrap: nowrap;
   padding-inline: 8px;
   gap: 8px;
+}
+.agenttokens-tabs-row[data-v-7625d539] .v-tabs {
+  flex: 0 0 auto;
+  min-width: 0;
 }
 .agenttokens-table-actions[data-v-7625d539] {
   display: flex;
@@ -1065,4 +1224,10 @@
   display: inline-flex !important;
   align-items: center !important;
   gap: 2px !important;
+}
+.mobile-action-btn[data-v-7625d539] .v-btn__content {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 2px !important;
+  font-size: 12px !important;
 }

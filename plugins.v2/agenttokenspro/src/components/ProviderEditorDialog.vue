@@ -579,11 +579,11 @@ async function queryModels() {
         <div class="form-item form-item--merged">
           <div class="form-item__half">
             <span class="form-label">Token 额度</span>
-            <VTextField v-model.number="provider.token_limit" type="number" variant="outlined" hide-details />
+            <VTextField v-model.number="provider.token_limit" type="number" variant="outlined" density="compact" hide-details />
           </div>
           <div class="form-item__half">
             <span class="form-label">初始已用</span>
-            <VTextField v-model.number="provider.used_tokens" type="number" variant="outlined" hide-details />
+            <VTextField v-model.number="provider.used_tokens" type="number" variant="outlined" density="compact" hide-details />
           </div>
         </div>
       </VCardText>
@@ -639,11 +639,12 @@ async function queryModels() {
 <style scoped>
 /* Label 固定宽度 */
 .form-label {
-  width: 95px;
+  width: 85px;
   flex-shrink: 0;
   font-size: 0.875rem;
   color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
-  padding-right: 12px;
+  padding-right: 20px;
+  white-space: nowrap;
 }
 
 /* 表单项容器：底部边框贯穿全宽 */
@@ -669,19 +670,29 @@ async function queryModels() {
   flex: 1;
   display: flex;
   align-items: center;
+  gap: 4px;
   min-width: 0;
 }
 
 .form-item__half .form-label {
-  width: 80px;
+  width: 120px;
   flex-shrink: 0;
+  font-size: 0.875rem;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  padding-right: 0;
+  text-align: right;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-sizing: border-box;
 }
 
-.form-item__half > .v-input {
-  flex: 1;
+.form-item__half > :deep(.v-input) {
+  flex: 0 1 200px;
   min-width: 0;
 }
+
+
 
 /* 输入框 + 图标按钮组合 */
 .input-group {
@@ -774,7 +785,7 @@ async function queryModels() {
   }
 
   .form-item__half .form-label {
-    width: 60px;
+    width: 80px;
     white-space: nowrap;
   }
 }
