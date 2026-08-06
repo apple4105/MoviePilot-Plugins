@@ -168,7 +168,7 @@ class CustomAudio(_PluginBase):
 
     plugin_name = "自定义音频 Provider"
     plugin_desc = "注册 custom 音频 provider，所有配置在插件内完成，不依赖系统音频设置"
-    plugin_version = "1.4"
+    plugin_version = "1.5"
     plugin_author = "apple4105"
     author_url = "https://github.com/apple4105"
     plugin_order = 100
