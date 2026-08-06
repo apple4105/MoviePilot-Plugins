@@ -67,6 +67,7 @@ const emit = defineEmits([
   'auto-save',
   'reset-usage',
   'reset-all-usage',
+  'reset-total',
   'reset-failures',
   'query-models',
   'test-connection',
@@ -480,7 +481,7 @@ function openVendorEditFromOverview(row) {
     </VSheet>
 
     <div class="agenttokens-overview-grid">
-      <UsageOverviewCard class="agenttokens-overview-card" :summary="displaySummary" />
+      <UsageOverviewCard class="agenttokens-overview-card" :summary="displaySummary" @reset-total="emit('reset-total')" />
       <VSheet border rounded class="agenttokens-stat-card">
         <VIcon icon="mdi-check-decagram-outline" color="success" />
         <div>
@@ -493,8 +494,27 @@ function openVendorEditFromOverview(row) {
       <VSheet border rounded class="agenttokens-stat-card">
         <VIcon icon="mdi-chart-timeline-variant" color="primary" />
         <div>
-          <div class="text-caption text-medium-emphasis">累计使用</div>
-          <div class="agenttokens-stat-card__value">{{ formatTokens(displaySummary.total_used) }}</div>
+          <div class="agenttokens-stat-card__label-row">
+            <span class="text-caption text-medium-emphasis">累计使用</span>
+            <VTooltip location="top">
+              <template #activator="{ props: tooltipProps }">
+                <VBtn
+                  v-bind="tooltipProps"
+                  icon
+                  size="x-small"
+                  variant="text"
+                  color="medium-emphasis"
+                  @click="emit('reset-total')"
+                >
+                  <VIcon size="14">mdi-backup-restore</VIcon>
+                </VBtn>
+              </template>
+              <span>重置总量（不影响各供应商用量记录）</span>
+            </VTooltip>
+          </div>
+          <div class="agenttokens-stat-card__value-row">
+            <span class="agenttokens-stat-card__value">{{ formatTokens(Number(displaySummary.limited_used ?? displaySummary.total_used ?? 0)) }}</span>
+          </div>
           <div class="agenttokens-stat-card__hint">
             限量 {{ formatTokens(limitedUsed) }} / 不限量 {{ formatTokens(unlimitedUsed) }}
           </div>
@@ -838,8 +858,20 @@ function openVendorEditFromOverview(row) {
   padding: 16px;
 }
 
-.agenttokens-stat-card__value {
+.agenttokens-stat-card__label-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.agenttokens-stat-card__value-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   margin-block-start: 2px;
+}
+
+.agenttokens-stat-card__value {
   font-size: 1.35rem;
   font-weight: 700;
   line-height: 1.25;

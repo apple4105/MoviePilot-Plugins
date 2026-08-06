@@ -1,5 +1,5 @@
 import { importShared } from './__federation_fn_import-JrT3xvdd.js';
-import { A as AgentTokensManager } from './AgentTokensManager-BBNSeFmd.js';
+import { A as AgentTokensManager } from './AgentTokensManager-BvKqzIwi.js';
 import { _ as _export_sfc, u as unwrapResponse } from './_plugin-vue_export-helper-MUdERlsH.js';
 
 const {createVNode:_createVNode,createTextVNode:_createTextVNode,resolveComponent:_resolveComponent,withCtx:_withCtx,toDisplayString:_toDisplayString,openBlock:_openBlock,createElementBlock:_createElementBlock} = await importShared('vue');
@@ -352,6 +352,17 @@ async function resetAllUsage() {
   }
 }
 
+// 仅重置限量总量显示（圆弧图归零），保留各供应商用量记录。
+async function resetTotalUsage() {
+  loading.value = true;
+  try {
+    const response = await props.api.post(`${pluginBase.value}/usage/reset_total`, {});
+    status.value = unwrapResponse(response) || status.value;
+  } finally {
+    loading.value = false;
+  }
+}
+
 // 使用后端代理读取模型列表，避免浏览器跨域和鉴权问题。
 async function queryModels({ provider, resolve, reject }) {
   try {
@@ -430,6 +441,7 @@ return (_ctx, _cache) => {
       onAutoSave: autoSave,
       onResetUsage: resetUsage,
       onResetAllUsage: resetAllUsage,
+      onResetTotal: resetTotalUsage,
       onResetFailures: resetFailures,
       onQueryModels: queryModels,
       onTestConnection: testConnection,
@@ -503,6 +515,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const AppPage = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-5cfb05f0"]]);
+const AppPage = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-039e03a5"]]);
 
 export { AppPage as default };

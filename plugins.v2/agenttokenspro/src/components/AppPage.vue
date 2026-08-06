@@ -357,6 +357,17 @@ async function resetAllUsage() {
   }
 }
 
+// 仅重置限量总量显示（圆弧图归零），保留各供应商用量记录。
+async function resetTotalUsage() {
+  loading.value = true
+  try {
+    const response = await props.api.post(`${pluginBase.value}/usage/reset_total`, {})
+    status.value = unwrapResponse(response) || status.value
+  } finally {
+    loading.value = false
+  }
+}
+
 // 使用后端代理读取模型列表，避免浏览器跨域和鉴权问题。
 async function queryModels({ provider, resolve, reject }) {
   try {
@@ -427,6 +438,7 @@ onUnmounted(() => {
       @auto-save="autoSave"
       @reset-usage="resetUsage"
       @reset-all-usage="resetAllUsage"
+      @reset-total="resetTotalUsage"
       @reset-failures="resetFailures"
       @query-models="queryModels"
       @test-connection="testConnection"

@@ -1,7 +1,7 @@
 import { importShared } from './__federation_fn_import-JrT3xvdd.js';
 import { _ as _export_sfc, f as formatTokens, P as PROVIDER_TYPE_OPTIONS, n as normalizeModelOptions, a as createProvider, b as buildProviderRows, d as buildProviderSummary, e as normalizeProvider, g as getNextProviderPriority } from './_plugin-vue_export-helper-MUdERlsH.js';
 
-const {createElementVNode:_createElementVNode$5,openBlock:_openBlock$5,createElementBlock:_createElementBlock$4,createCommentVNode:_createCommentVNode$4,renderList:_renderList$3,Fragment:_Fragment$4,resolveComponent:_resolveComponent$5,createVNode:_createVNode$5,normalizeClass:_normalizeClass$4,withModifiers:_withModifiers$3,toDisplayString:_toDisplayString$5,createTextVNode:_createTextVNode$5,withCtx:_withCtx$5,unref:_unref$4,mergeProps:_mergeProps$1,createBlock:_createBlock$5} = await importShared('vue');
+const {createElementVNode:_createElementVNode$5,openBlock:_openBlock$5,createElementBlock:_createElementBlock$4,createCommentVNode:_createCommentVNode$4,renderList:_renderList$3,Fragment:_Fragment$4,resolveComponent:_resolveComponent$5,createVNode:_createVNode$5,normalizeClass:_normalizeClass$4,withModifiers:_withModifiers$3,toDisplayString:_toDisplayString$5,createTextVNode:_createTextVNode$5,withCtx:_withCtx$5,unref:_unref$4,mergeProps:_mergeProps$2,createBlock:_createBlock$5} = await importShared('vue');
 
 
 const _hoisted_1$5 = {
@@ -18,7 +18,7 @@ const _hoisted_5$5 = ["onClick"];
 const _hoisted_6$5 = { class: "status-toggle-cell" };
 const _hoisted_7$5 = { class: "col-name" };
 const _hoisted_8$5 = { class: "col-type" };
-const _hoisted_9$4 = {
+const _hoisted_9$5 = {
   key: 0,
   class: "col-url"
 };
@@ -316,7 +316,7 @@ return (_ctx, _cache) => {
                   ]),
                   _createElementVNode$5("td", _hoisted_8$5, _toDisplayString$5(row.provider), 1),
                   (__props.showCredentials)
-                    ? (_openBlock$5(), _createElementBlock$4("td", _hoisted_9$4, _toDisplayString$5(row.base_url), 1))
+                    ? (_openBlock$5(), _createElementBlock$4("td", _hoisted_9$5, _toDisplayString$5(row.base_url), 1))
                     : _createCommentVNode$4("", true),
                   (__props.showCredentials)
                     ? (_openBlock$5(), _createElementBlock$4("td", _hoisted_10$4, _toDisplayString$5(getMaskedApiKey(row)), 1))
@@ -356,7 +356,7 @@ return (_ctx, _cache) => {
                   }, [
                     _createVNode$5(_component_VTooltip, { location: "top" }, {
                       activator: _withCtx$5(({ props: tooltipProps }) => [
-                        _createVNode$5(_component_VBtn, _mergeProps$1({ ref_for: true }, tooltipProps, {
+                        _createVNode$5(_component_VBtn, _mergeProps$2({ ref_for: true }, tooltipProps, {
                           icon: isHardDisabled(row) ? 'mdi-lock-open-variant-outline' : 'mdi-refresh',
                           size: "small",
                           variant: isHardDisabled(row) ? 'tonal' : 'text',
@@ -420,7 +420,7 @@ const _hoisted_5$4 = { class: "input-group" };
 const _hoisted_6$4 = { class: "form-item" };
 const _hoisted_7$4 = { class: "form-label" };
 const _hoisted_8$4 = { class: "input-group" };
-const _hoisted_9$3 = { class: "form-item" };
+const _hoisted_9$4 = { class: "form-item" };
 const _hoisted_10$3 = { class: "form-item" };
 const _hoisted_11$3 = { class: "form-item form-item--merged" };
 const _hoisted_12$3 = { class: "form-item__half" };
@@ -1059,7 +1059,7 @@ return (_ctx, _cache) => {
                     }, null, 8, ["loading"])
                   ])
                 ]),
-                _createElementVNode$4("div", _hoisted_9$3, [
+                _createElementVNode$4("div", _hoisted_9$4, [
                   _cache[22] || (_cache[22] = _createElementVNode$4("span", { class: "form-label" }, "User-Agent", -1)),
                   _createVNode$4(_component_VTextField, {
                     modelValue: __props.provider.user_agent,
@@ -1230,7 +1230,7 @@ return (_ctx, _cache) => {
 };
 const ProviderEditorDialog = /*#__PURE__*/_export_sfc(_sfc_main$4, [['__scopeId',"data-v-b2133699"]]);
 
-const {createElementVNode:_createElementVNode$3,renderList:_renderList$2,Fragment:_Fragment$2,openBlock:_openBlock$3,createElementBlock:_createElementBlock$2,resolveComponent:_resolveComponent$3,createVNode:_createVNode$3,createCommentVNode:_createCommentVNode$2,toDisplayString:_toDisplayString$3,normalizeClass:_normalizeClass$2,unref:_unref$2,createTextVNode:_createTextVNode$3,mergeProps:_mergeProps,withCtx:_withCtx$3,createBlock:_createBlock$3,withModifiers:_withModifiers$1} = await importShared('vue');
+const {createElementVNode:_createElementVNode$3,renderList:_renderList$2,Fragment:_Fragment$2,openBlock:_openBlock$3,createElementBlock:_createElementBlock$2,resolveComponent:_resolveComponent$3,createVNode:_createVNode$3,createCommentVNode:_createCommentVNode$2,toDisplayString:_toDisplayString$3,normalizeClass:_normalizeClass$2,unref:_unref$2,createTextVNode:_createTextVNode$3,mergeProps:_mergeProps$1,withCtx:_withCtx$3,createBlock:_createBlock$3,withModifiers:_withModifiers$1} = await importShared('vue');
 
 
 const _hoisted_1$3 = { class: "provider-table-scroll" };
@@ -1253,7 +1253,7 @@ const _hoisted_5$3 = {
 const _hoisted_6$3 = ["title", "onClick"];
 const _hoisted_7$3 = { class: "name-cell" };
 const _hoisted_8$3 = ["onClick"];
-const _hoisted_9$2 = { class: "progress-cell" };
+const _hoisted_9$3 = { class: "progress-cell" };
 const _hoisted_10$2 = { class: "text-success" };
 const _hoisted_11$2 = { class: "error-cell" };
 const _hoisted_12$2 = {
@@ -1530,7 +1530,7 @@ return (_ctx, _cache) => {
                   _createElementVNode$3("td", null, _toDisplayString$3(getModelName(row.model)), 1),
                   _createElementVNode$3("td", null, _toDisplayString$3(_unref$2(formatTokens)(row.usage?.total_tokens)), 1),
                   _createElementVNode$3("td", null, _toDisplayString$3(row.usage?.remaining_tokens === null ? '不限' : _unref$2(formatTokens)(row.usage?.remaining_tokens)), 1),
-                  _createElementVNode$3("td", _hoisted_9$2, [
+                  _createElementVNode$3("td", _hoisted_9$3, [
                     _createVNode$3(_component_VProgressLinear, {
                       "model-value": row.usage?.usage_percent || 0,
                       color: rowStatusColor(row),
@@ -1553,7 +1553,7 @@ return (_ctx, _cache) => {
                           location: "top"
                         }, {
                           activator: _withCtx$3(({ props: tooltipProps }) => [
-                            _createElementVNode$3("span", _mergeProps({ ref_for: true }, tooltipProps, { class: "text-error text-truncate d-inline-block error-text" }), _toDisplayString$3(row.usage.last_error), 17)
+                            _createElementVNode$3("span", _mergeProps$1({ ref_for: true }, tooltipProps, { class: "text-error text-truncate d-inline-block error-text" }), _toDisplayString$3(row.usage.last_error), 17)
                           ]),
                           default: _withCtx$3(() => [
                             _createTextVNode$3(" " + _toDisplayString$3(row.usage.last_error), 1)
@@ -1594,7 +1594,7 @@ return (_ctx, _cache) => {
                       }, null, 8, ["loading", "disabled", "onClick"]),
                       _createVNode$3(_component_VTooltip, { location: "top" }, {
                         activator: _withCtx$3(({ props: tooltipProps }) => [
-                          _createVNode$3(_component_VBtn, _mergeProps({ ref_for: true }, tooltipProps, {
+                          _createVNode$3(_component_VBtn, _mergeProps$1({ ref_for: true }, tooltipProps, {
                             icon: row.usage?.hard_disabled ? 'mdi-lock-open-variant-outline' : 'mdi-refresh',
                             size: "small",
                             variant: row.usage?.hard_disabled ? 'tonal' : 'text',
@@ -1638,12 +1638,13 @@ const {toDisplayString:_toDisplayString$2,createElementVNode:_createElementVNode
 
 const _hoisted_1$2 = { class: "usage-overview-card__content" };
 const _hoisted_2$2 = { class: "usage-overview-card__chart" };
-const _hoisted_3$2 = { class: "usage-overview-card__percent" };
-const _hoisted_4$2 = { class: "usage-overview-card__body" };
-const _hoisted_5$2 = { class: "usage-overview-card__title-row" };
-const _hoisted_6$2 = { class: "usage-overview-card__headline" };
-const _hoisted_7$2 = { class: "text-medium-emphasis" };
-const _hoisted_8$2 = { class: "usage-overview-card__meta" };
+const _hoisted_3$2 = { class: "usage-overview-card__chart-inner" };
+const _hoisted_4$2 = { class: "usage-overview-card__percent" };
+const _hoisted_5$2 = { class: "usage-overview-card__body" };
+const _hoisted_6$2 = { class: "usage-overview-card__title-row" };
+const _hoisted_7$2 = { class: "usage-overview-card__headline" };
+const _hoisted_8$2 = { class: "text-medium-emphasis" };
+const _hoisted_9$2 = { class: "usage-overview-card__meta" };
 
 const {computed: computed$2} = await importShared('vue');
 
@@ -1696,25 +1697,27 @@ return (_ctx, _cache) => {
     default: _withCtx$2(() => [
       _createElementVNode$2("div", _hoisted_1$2, [
         _createElementVNode$2("div", _hoisted_2$2, [
-          _createVNode$2(_component_VProgressCircular, {
-            "model-value": usagePercent.value,
-            color: progressColor.value,
-            "bg-color": "surface-variant",
-            size: 132,
-            width: 12
-          }, {
-            default: _withCtx$2(() => [
-              _createElementVNode$2("div", _hoisted_3$2, _toDisplayString$2(totalLimit.value > 0 ? usagePercentText.value : '不限'), 1)
-            ]),
-            _: 1
-          }, 8, ["model-value", "color"])
+          _createElementVNode$2("div", _hoisted_3$2, [
+            _createVNode$2(_component_VProgressCircular, {
+              "model-value": usagePercent.value,
+              color: progressColor.value,
+              "bg-color": "surface-variant",
+              size: 132,
+              width: 12
+            }, {
+              default: _withCtx$2(() => [
+                _createElementVNode$2("div", _hoisted_4$2, _toDisplayString$2(totalLimit.value > 0 ? usagePercentText.value : '不限'), 1)
+              ]),
+              _: 1
+            }, 8, ["model-value", "color"])
+          ])
         ]),
-        _createElementVNode$2("div", _hoisted_4$2, [
-          _createElementVNode$2("div", _hoisted_5$2, [
+        _createElementVNode$2("div", _hoisted_5$2, [
+          _createElementVNode$2("div", _hoisted_6$2, [
             _cache[0] || (_cache[0] = _createElementVNode$2("div", { class: "text-caption text-medium-emphasis" }, "限量模型使用进度", -1)),
-            _createElementVNode$2("div", _hoisted_6$2, [
+            _createElementVNode$2("div", _hoisted_7$2, [
               _createTextVNode$2(_toDisplayString$2(_unref$1(formatTokens)(totalUsed.value)) + " ", 1),
-              _createElementVNode$2("span", _hoisted_7$2, "/ " + _toDisplayString$2(totalLimit.value > 0 ? _unref$1(formatTokens)(totalLimit.value) : '不限'), 1)
+              _createElementVNode$2("span", _hoisted_8$2, "/ " + _toDisplayString$2(totalLimit.value > 0 ? _unref$1(formatTokens)(totalLimit.value) : '不限'), 1)
             ])
           ]),
           _createVNode$2(_component_VProgressLinear, {
@@ -1724,7 +1727,7 @@ return (_ctx, _cache) => {
             rounded: "",
             class: "my-4"
           }, null, 8, ["model-value", "color"]),
-          _createElementVNode$2("div", _hoisted_8$2, [
+          _createElementVNode$2("div", _hoisted_9$2, [
             _createElementVNode$2("span", null, "可用 " + _toDisplayString$2(__props.summary.available_count || 0) + " / " + _toDisplayString$2(__props.summary.enabled_count || 0), 1),
             _createElementVNode$2("span", null, "剩余 " + _toDisplayString$2(remainingTokens.value === null ? '不限' : _unref$1(formatTokens)(remainingTokens.value)), 1)
           ])
@@ -1737,7 +1740,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const UsageOverviewCard = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-435e5c32"]]);
+const UsageOverviewCard = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-eb8515ea"]]);
 
 const {toDisplayString:_toDisplayString$1,createTextVNode:_createTextVNode$1,resolveComponent:_resolveComponent$1,withCtx:_withCtx$1,openBlock:_openBlock$1,createBlock:_createBlock$1,createCommentVNode:_createCommentVNode$1,createVNode:_createVNode$1,createElementBlock:_createElementBlock$1,createElementVNode:_createElementVNode$1,renderList:_renderList$1,Fragment:_Fragment$1,normalizeClass:_normalizeClass$1,withModifiers:_withModifiers} = await importShared('vue');
 
@@ -2308,7 +2311,7 @@ return (_ctx, _cache) => {
 };
 const VendorManager = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-0eec1d3a"]]);
 
-const {createElementVNode:_createElementVNode,resolveComponent:_resolveComponent,createVNode:_createVNode,openBlock:_openBlock,createElementBlock:_createElementBlock,createCommentVNode:_createCommentVNode,toDisplayString:_toDisplayString,createTextVNode:_createTextVNode,withCtx:_withCtx,createBlock:_createBlock,unref:_unref,renderList:_renderList,Fragment:_Fragment,normalizeClass:_normalizeClass} = await importShared('vue');
+const {createElementVNode:_createElementVNode,resolveComponent:_resolveComponent,createVNode:_createVNode,openBlock:_openBlock,createElementBlock:_createElementBlock,createCommentVNode:_createCommentVNode,toDisplayString:_toDisplayString,createTextVNode:_createTextVNode,withCtx:_withCtx,createBlock:_createBlock,unref:_unref,mergeProps:_mergeProps,renderList:_renderList,Fragment:_Fragment,normalizeClass:_normalizeClass} = await importShared('vue');
 
 
 const _hoisted_1 = {
@@ -2325,20 +2328,22 @@ const _hoisted_8 = { class: "agenttokens-control-panel__limit-value" };
 const _hoisted_9 = { class: "agenttokens-control-panel__cell" };
 const _hoisted_10 = { class: "agenttokens-overview-grid" };
 const _hoisted_11 = { class: "agenttokens-stat-card__value" };
-const _hoisted_12 = { class: "agenttokens-stat-card__value" };
-const _hoisted_13 = { class: "agenttokens-stat-card__hint" };
-const _hoisted_14 = {
+const _hoisted_12 = { class: "agenttokens-stat-card__label-row" };
+const _hoisted_13 = { class: "agenttokens-stat-card__value-row" };
+const _hoisted_14 = { class: "agenttokens-stat-card__value" };
+const _hoisted_15 = { class: "agenttokens-stat-card__hint" };
+const _hoisted_16 = {
   key: 0,
   class: "mobile-nav-bar"
 };
-const _hoisted_15 = { class: "mobile-tabs" };
-const _hoisted_16 = ["onClick"];
-const _hoisted_17 = { class: "mobile-actions" };
-const _hoisted_18 = {
+const _hoisted_17 = { class: "mobile-tabs" };
+const _hoisted_18 = ["onClick"];
+const _hoisted_19 = { class: "mobile-actions" };
+const _hoisted_20 = {
   key: 1,
   class: "agenttokens-tabs-row"
 };
-const _hoisted_19 = { class: "agenttokens-table-actions" };
+const _hoisted_21 = { class: "agenttokens-table-actions" };
 
 const {computed,nextTick,onBeforeUnmount,onMounted,ref,watch} = await importShared('vue');
 
@@ -2397,6 +2402,7 @@ const _sfc_main = {
   'auto-save',
   'reset-usage',
   'reset-all-usage',
+  'reset-total',
   'reset-failures',
   'query-models',
   'test-connection',
@@ -2766,6 +2772,7 @@ return (_ctx, _cache) => {
   const _component_VIcon = _resolveComponent("VIcon");
   const _component_VTextField = _resolveComponent("VTextField");
   const _component_VSheet = _resolveComponent("VSheet");
+  const _component_VTooltip = _resolveComponent("VTooltip");
   const _component_VSlideYTransition = _resolveComponent("VSlideYTransition");
   const _component_VTab = _resolveComponent("VTab");
   const _component_VTabs = _resolveComponent("VTabs");
@@ -2783,7 +2790,7 @@ return (_ctx, _cache) => {
   }, [
     (!__props.hideTitle)
       ? (_openBlock(), _createElementBlock("div", _hoisted_1, [
-          _cache[18] || (_cache[18] = _createElementVNode("h2", { class: "text-2xl font-bold leading-7 text-gray-100 truncate sm:text-3xl sm:leading-9" }, [
+          _cache[20] || (_cache[20] = _createElementVNode("h2", { class: "text-2xl font-bold leading-7 text-gray-100 truncate sm:text-3xl sm:leading-9" }, [
             _createElementVNode("span", { class: "text-moviepilot" }, "Agent Tokens 管理")
           ], -1)),
           _createVNode(_component_VSpacer),
@@ -2823,7 +2830,7 @@ return (_ctx, _cache) => {
       default: _withCtx(() => [
         _createElementVNode("div", _hoisted_2, [
           _createElementVNode("div", _hoisted_3, [
-            _cache[19] || (_cache[19] = _createElementVNode("span", { class: "switch-label" }, "启用插件", -1)),
+            _cache[21] || (_cache[21] = _createElementVNode("span", { class: "switch-label" }, "启用插件", -1)),
             _createVNode(_component_VSwitch, {
               modelValue: configValue.value.enabled,
               "onUpdate:modelValue": _cache[2] || (_cache[2] = $event => ((configValue.value.enabled) = $event)),
@@ -2833,7 +2840,7 @@ return (_ctx, _cache) => {
             }, null, 8, ["modelValue"])
           ]),
           _createElementVNode("div", _hoisted_4, [
-            _cache[20] || (_cache[20] = _createElementVNode("span", { class: "switch-label" }, "侧边栏入口", -1)),
+            _cache[22] || (_cache[22] = _createElementVNode("span", { class: "switch-label" }, "侧边栏入口", -1)),
             _createVNode(_component_VSwitch, {
               modelValue: configValue.value.show_sidebar_nav,
               "onUpdate:modelValue": _cache[3] || (_cache[3] = $event => ((configValue.value.show_sidebar_nav) = $event)),
@@ -2851,12 +2858,12 @@ return (_ctx, _cache) => {
                 color: "info",
                 size: "small"
               }),
-              _cache[21] || (_cache[21] = _createElementVNode("span", null, "限量总额度", -1))
+              _cache[23] || (_cache[23] = _createElementVNode("span", null, "限量总额度", -1))
             ]),
             _createElementVNode("span", _hoisted_8, _toDisplayString(displaySummary.value.total_limit ? _unref(formatTokens)(displaySummary.value.total_limit) : '不限'), 1)
           ]),
           _createElementVNode("div", _hoisted_9, [
-            _cache[22] || (_cache[22] = _createElementVNode("span", { class: "config-label" }, "失败切换阈值", -1)),
+            _cache[24] || (_cache[24] = _createElementVNode("span", { class: "config-label" }, "失败切换阈值", -1)),
             _createVNode(_component_VTextField, {
               modelValue: configValue.value.max_failures,
               "onUpdate:modelValue": _cache[4] || (_cache[4] = $event => ((configValue.value.max_failures) = $event)),
@@ -2878,7 +2885,8 @@ return (_ctx, _cache) => {
     _createElementVNode("div", _hoisted_10, [
       _createVNode(UsageOverviewCard, {
         class: "agenttokens-overview-card",
-        summary: displaySummary.value
+        summary: displaySummary.value,
+        onResetTotal: _cache[5] || (_cache[5] = $event => (emit('reset-total')))
       }, null, 8, ["summary"]),
       _createVNode(_component_VSheet, {
         border: "",
@@ -2891,7 +2899,7 @@ return (_ctx, _cache) => {
             color: "success"
           }),
           _createElementVNode("div", null, [
-            _cache[23] || (_cache[23] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "可用供应商", -1)),
+            _cache[25] || (_cache[25] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "可用供应商", -1)),
             _createElementVNode("div", _hoisted_11, _toDisplayString(displaySummary.value.available_count || 0) + " / " + _toDisplayString(displaySummary.value.enabled_count || 0), 1)
           ])
         ]),
@@ -2908,9 +2916,38 @@ return (_ctx, _cache) => {
             color: "primary"
           }),
           _createElementVNode("div", null, [
-            _cache[24] || (_cache[24] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "累计使用", -1)),
-            _createElementVNode("div", _hoisted_12, _toDisplayString(_unref(formatTokens)(displaySummary.value.total_used)), 1),
-            _createElementVNode("div", _hoisted_13, " 限量 " + _toDisplayString(_unref(formatTokens)(limitedUsed.value)) + " / 不限量 " + _toDisplayString(_unref(formatTokens)(unlimitedUsed.value)), 1)
+            _createElementVNode("div", _hoisted_12, [
+              _cache[28] || (_cache[28] = _createElementVNode("span", { class: "text-caption text-medium-emphasis" }, "累计使用", -1)),
+              _createVNode(_component_VTooltip, { location: "top" }, {
+                activator: _withCtx(({ props: tooltipProps }) => [
+                  _createVNode(_component_VBtn, _mergeProps(tooltipProps, {
+                    icon: "",
+                    size: "x-small",
+                    variant: "text",
+                    color: "medium-emphasis",
+                    onClick: _cache[6] || (_cache[6] = $event => (emit('reset-total')))
+                  }), {
+                    default: _withCtx(() => [
+                      _createVNode(_component_VIcon, { size: "14" }, {
+                        default: _withCtx(() => [...(_cache[26] || (_cache[26] = [
+                          _createTextVNode("mdi-backup-restore", -1)
+                        ]))]),
+                        _: 1
+                      })
+                    ]),
+                    _: 1
+                  }, 16)
+                ]),
+                default: _withCtx(() => [
+                  _cache[27] || (_cache[27] = _createElementVNode("span", null, "重置总量（不影响各供应商用量记录）", -1))
+                ]),
+                _: 1
+              })
+            ]),
+            _createElementVNode("div", _hoisted_13, [
+              _createElementVNode("span", _hoisted_14, _toDisplayString(_unref(formatTokens)(Number(displaySummary.value.limited_used ?? displaySummary.value.total_used ?? 0))), 1)
+            ]),
+            _createElementVNode("div", _hoisted_15, " 限量 " + _toDisplayString(_unref(formatTokens)(limitedUsed.value)) + " / 不限量 " + _toDisplayString(_unref(formatTokens)(unlimitedUsed.value)), 1)
           ])
         ]),
         _: 1
@@ -2926,7 +2963,7 @@ return (_ctx, _cache) => {
               density: "compact",
               class: "my-2",
               closable: "",
-              "onClick:close": _cache[5] || (_cache[5] = $event => (testFeedback.value.show = false))
+              "onClick:close": _cache[7] || (_cache[7] = $event => (testFeedback.value.show = false))
             }, {
               default: _withCtx(() => [
                 _createTextVNode(_toDisplayString(testFeedback.value.message), 1)
@@ -2944,17 +2981,17 @@ return (_ctx, _cache) => {
     }, {
       default: _withCtx(() => [
         (isMobile.value)
-          ? (_openBlock(), _createElementBlock("div", _hoisted_14, [
-              _createElementVNode("div", _hoisted_15, [
+          ? (_openBlock(), _createElementBlock("div", _hoisted_16, [
+              _createElementVNode("div", _hoisted_17, [
                 (_openBlock(), _createElementBlock(_Fragment, null, _renderList(mobileTabs, (tab) => {
                   return _createElementVNode("button", {
                     key: tab.value,
                     class: _normalizeClass(['mobile-tab-btn', { active: activeTab.value === tab.value }]),
                     onClick: $event => (activeTab.value = tab.value)
-                  }, _toDisplayString(tab.label), 11, _hoisted_16)
+                  }, _toDisplayString(tab.label), 11, _hoisted_18)
                 }), 64))
               ]),
-              _createElementVNode("div", _hoisted_17, [
+              _createElementVNode("div", _hoisted_19, [
                 (activeTab.value === 'usage')
                   ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [
                       _createVNode(_component_VBtn, {
@@ -2966,12 +3003,12 @@ return (_ctx, _cache) => {
                       }, {
                         default: _withCtx(() => [
                           _createVNode(_component_VIcon, { size: "18" }, {
-                            default: _withCtx(() => [...(_cache[25] || (_cache[25] = [
+                            default: _withCtx(() => [...(_cache[29] || (_cache[29] = [
                               _createTextVNode("mdi-export", -1)
                             ]))]),
                             _: 1
                           }),
-                          _cache[26] || (_cache[26] = _createElementVNode("span", null, "导出", -1))
+                          _cache[30] || (_cache[30] = _createElementVNode("span", null, "导出", -1))
                         ]),
                         _: 1
                       }),
@@ -2984,12 +3021,12 @@ return (_ctx, _cache) => {
                       }, {
                         default: _withCtx(() => [
                           _createVNode(_component_VIcon, { size: "18" }, {
-                            default: _withCtx(() => [...(_cache[27] || (_cache[27] = [
+                            default: _withCtx(() => [...(_cache[31] || (_cache[31] = [
                               _createTextVNode("mdi-import", -1)
                             ]))]),
                             _: 1
                           }),
-                          _cache[28] || (_cache[28] = _createElementVNode("span", null, "导入", -1))
+                          _cache[32] || (_cache[32] = _createElementVNode("span", null, "导入", -1))
                         ]),
                         _: 1
                       }),
@@ -3014,12 +3051,12 @@ return (_ctx, _cache) => {
                       }, {
                         default: _withCtx(() => [
                           _createVNode(_component_VIcon, { size: "18" }, {
-                            default: _withCtx(() => [...(_cache[29] || (_cache[29] = [
+                            default: _withCtx(() => [...(_cache[33] || (_cache[33] = [
                               _createTextVNode("mdi-plus", -1)
                             ]))]),
                             _: 1
                           }),
-                          _cache[30] || (_cache[30] = _createElementVNode("span", null, "新增", -1))
+                          _cache[34] || (_cache[34] = _createElementVNode("span", null, "新增", -1))
                         ]),
                         _: 1
                       }),
@@ -3032,7 +3069,7 @@ return (_ctx, _cache) => {
                       }, {
                         default: _withCtx(() => [
                           _createVNode(_component_VIcon, { size: "18" }, {
-                            default: _withCtx(() => [...(_cache[31] || (_cache[31] = [
+                            default: _withCtx(() => [...(_cache[35] || (_cache[35] = [
                               _createTextVNode("mdi-sort", -1)
                             ]))]),
                             _: 1
@@ -3050,12 +3087,12 @@ return (_ctx, _cache) => {
                       }, {
                         default: _withCtx(() => [
                           _createVNode(_component_VIcon, { size: "18" }, {
-                            default: _withCtx(() => [...(_cache[32] || (_cache[32] = [
+                            default: _withCtx(() => [...(_cache[36] || (_cache[36] = [
                               _createTextVNode("mdi-backup-restore", -1)
                             ]))]),
                             _: 1
                           }),
-                          _cache[33] || (_cache[33] = _createElementVNode("span", null, "重置", -1))
+                          _cache[37] || (_cache[37] = _createElementVNode("span", null, "重置", -1))
                         ]),
                         _: 1
                       })
@@ -3072,12 +3109,12 @@ return (_ctx, _cache) => {
                       }, {
                         default: _withCtx(() => [
                           _createVNode(_component_VIcon, { size: "18" }, {
-                            default: _withCtx(() => [...(_cache[34] || (_cache[34] = [
+                            default: _withCtx(() => [...(_cache[38] || (_cache[38] = [
                               _createTextVNode("mdi-plus", -1)
                             ]))]),
                             _: 1
                           }),
-                          _cache[35] || (_cache[35] = _createElementVNode("span", null, "新增", -1))
+                          _cache[39] || (_cache[39] = _createElementVNode("span", null, "新增", -1))
                         ]),
                         _: 1
                       }, 8, ["onClick"]),
@@ -3090,7 +3127,7 @@ return (_ctx, _cache) => {
                       }, {
                         default: _withCtx(() => [
                           _createVNode(_component_VIcon, { size: "18" }, {
-                            default: _withCtx(() => [...(_cache[36] || (_cache[36] = [
+                            default: _withCtx(() => [...(_cache[40] || (_cache[40] = [
                               _createTextVNode("mdi-sort", -1)
                             ]))]),
                             _: 1
@@ -3103,27 +3140,27 @@ return (_ctx, _cache) => {
                   : _createCommentVNode("", true)
               ])
             ]))
-          : (_openBlock(), _createElementBlock("div", _hoisted_18, [
+          : (_openBlock(), _createElementBlock("div", _hoisted_20, [
               _createVNode(_component_VTabs, {
                 modelValue: activeTab.value,
-                "onUpdate:modelValue": _cache[6] || (_cache[6] = $event => ((activeTab).value = $event)),
+                "onUpdate:modelValue": _cache[8] || (_cache[8] = $event => ((activeTab).value = $event)),
                 density: "comfortable"
               }, {
                 default: _withCtx(() => [
                   _createVNode(_component_VTab, { value: "usage" }, {
-                    default: _withCtx(() => [...(_cache[37] || (_cache[37] = [
+                    default: _withCtx(() => [...(_cache[41] || (_cache[41] = [
                       _createTextVNode("总览", -1)
                     ]))]),
                     _: 1
                   }),
                   _createVNode(_component_VTab, { value: "config" }, {
-                    default: _withCtx(() => [...(_cache[38] || (_cache[38] = [
+                    default: _withCtx(() => [...(_cache[42] || (_cache[42] = [
                       _createTextVNode("供应商", -1)
                     ]))]),
                     _: 1
                   }),
                   _createVNode(_component_VTab, { value: "vendors" }, {
-                    default: _withCtx(() => [...(_cache[39] || (_cache[39] = [
+                    default: _withCtx(() => [...(_cache[43] || (_cache[43] = [
                       _createTextVNode("厂商", -1)
                     ]))]),
                     _: 1
@@ -3131,7 +3168,7 @@ return (_ctx, _cache) => {
                 ]),
                 _: 1
               }, 8, ["modelValue"]),
-              _createElementVNode("div", _hoisted_19, [
+              _createElementVNode("div", _hoisted_21, [
                 (activeTab.value === 'usage')
                   ? (_openBlock(), _createElementBlock(_Fragment, { key: 0 }, [
                       _createVNode(_component_VBtn, {
@@ -3140,7 +3177,7 @@ return (_ctx, _cache) => {
                         variant: "tonal",
                         onClick: handleExport
                       }, {
-                        default: _withCtx(() => [...(_cache[40] || (_cache[40] = [
+                        default: _withCtx(() => [...(_cache[44] || (_cache[44] = [
                           _createTextVNode(" 导出配置 ", -1)
                         ]))]),
                         _: 1
@@ -3151,7 +3188,7 @@ return (_ctx, _cache) => {
                         variant: "tonal",
                         onClick: handleImportClick
                       }, {
-                        default: _withCtx(() => [...(_cache[41] || (_cache[41] = [
+                        default: _withCtx(() => [...(_cache[45] || (_cache[45] = [
                           _createTextVNode(" 导入配置 ", -1)
                         ]))]),
                         _: 1
@@ -3174,7 +3211,7 @@ return (_ctx, _cache) => {
                         variant: "tonal",
                         onClick: addProvider
                       }, {
-                        default: _withCtx(() => [...(_cache[42] || (_cache[42] = [
+                        default: _withCtx(() => [...(_cache[46] || (_cache[46] = [
                           _createTextVNode(" 新增 ", -1)
                         ]))]),
                         _: 1
@@ -3196,7 +3233,7 @@ return (_ctx, _cache) => {
                         variant: "tonal",
                         onClick: resetAllUsage
                       }, {
-                        default: _withCtx(() => [...(_cache[43] || (_cache[43] = [
+                        default: _withCtx(() => [...(_cache[47] || (_cache[47] = [
                           _createTextVNode(" 重置用量 ", -1)
                         ]))]),
                         _: 1
@@ -3211,7 +3248,7 @@ return (_ctx, _cache) => {
                         variant: "tonal",
                         onClick: vendorRef.value?.addVendor
                       }, {
-                        default: _withCtx(() => [...(_cache[44] || (_cache[44] = [
+                        default: _withCtx(() => [...(_cache[48] || (_cache[48] = [
                           _createTextVNode(" 新增 ", -1)
                         ]))]),
                         _: 1
@@ -3234,7 +3271,7 @@ return (_ctx, _cache) => {
         _createVNode(_component_VDivider),
         _createVNode(_component_VWindow, {
           modelValue: activeTab.value,
-          "onUpdate:modelValue": _cache[12] || (_cache[12] = $event => ((activeTab).value = $event)),
+          "onUpdate:modelValue": _cache[14] || (_cache[14] = $event => ((activeTab).value = $event)),
           touch: false,
           class: "agenttokens-window"
         }, {
@@ -3249,8 +3286,8 @@ return (_ctx, _cache) => {
                   onReset: resetUsage,
                   onSelect: selectProvider,
                   onOpenVendorEdit: openVendorEditFromOverview,
-                  onTest: _cache[7] || (_cache[7] = payload => emit('test-provider', payload)),
-                  onResetFailures: _cache[8] || (_cache[8] = providerId => emit('reset-failures', providerId))
+                  onTest: _cache[9] || (_cache[9] = payload => emit('test-provider', payload)),
+                  onResetFailures: _cache[10] || (_cache[10] = providerId => emit('reset-failures', providerId))
                 }, null, 8, ["provider-rows", "active-provider-id", "failed-provider-ids", "max-failures"])
               ]),
               _: 1
@@ -3270,7 +3307,7 @@ return (_ctx, _cache) => {
                   onSelect: selectProvider,
                   onToggle: toggleProvider,
                   onReorder: reorderProvider,
-                  onResetFailures: _cache[9] || (_cache[9] = providerId => emit('reset-failures', providerId))
+                  onResetFailures: _cache[11] || (_cache[11] = providerId => emit('reset-failures', providerId))
                 }, null, 8, ["providers", "provider-rows", "active-provider-id", "failed-provider-ids", "drag-mode", "max-failures"])
               ]),
               _: 1
@@ -3285,8 +3322,8 @@ return (_ctx, _cache) => {
                   "plugin-base": props.pluginBase,
                   loading: __props.loading,
                   visible: activeTab.value === 'vendors',
-                  onRefresh: _cache[10] || (_cache[10] = $event => (emit('refresh'))),
-                  onDragModeChange: _cache[11] || (_cache[11] = $event => (vendorDragMode.value = $event))
+                  onRefresh: _cache[12] || (_cache[12] = $event => (emit('refresh'))),
+                  onDragModeChange: _cache[13] || (_cache[13] = $event => (vendorDragMode.value = $event))
                 }, null, 8, ["vendors", "api", "plugin-base", "loading", "visible"])
               ]),
               _: 1
@@ -3299,7 +3336,7 @@ return (_ctx, _cache) => {
     }),
     _createVNode(ProviderEditorDialog, {
       modelValue: showEditor.value,
-      "onUpdate:modelValue": _cache[13] || (_cache[13] = $event => ((showEditor).value = $event)),
+      "onUpdate:modelValue": _cache[15] || (_cache[15] = $event => ((showEditor).value = $event)),
       "retain-focus": false,
       provider: editedProvider.value,
       "editor-index": editorIndex.value,
@@ -3308,12 +3345,12 @@ return (_ctx, _cache) => {
       onAfterLeave: resetForm,
       onCommit: commitProvider,
       onDelete: removeProvider,
-      onQueryModels: _cache[14] || (_cache[14] = payload => emit('query-models', payload)),
-      onTestConnection: _cache[15] || (_cache[15] = payload => emit('test-connection', payload))
+      onQueryModels: _cache[16] || (_cache[16] = payload => emit('query-models', payload)),
+      onTestConnection: _cache[17] || (_cache[17] = payload => emit('test-connection', payload))
     }, null, 8, ["modelValue", "provider", "editor-index", "existing-providers", "vendors"]),
     _createVNode(_component_VDialog, {
       modelValue: showDeleteProviderConfirm.value,
-      "onUpdate:modelValue": _cache[17] || (_cache[17] = $event => ((showDeleteProviderConfirm).value = $event)),
+      "onUpdate:modelValue": _cache[19] || (_cache[19] = $event => ((showDeleteProviderConfirm).value = $event)),
       "max-width": "420",
       persistent: ""
     }, {
@@ -3321,16 +3358,16 @@ return (_ctx, _cache) => {
         _createVNode(_component_VCard, null, {
           default: _withCtx(() => [
             _createVNode(_component_VCardTitle, { class: "text-subtitle-1" }, {
-              default: _withCtx(() => [...(_cache[45] || (_cache[45] = [
+              default: _withCtx(() => [...(_cache[49] || (_cache[49] = [
                 _createTextVNode("确认删除", -1)
               ]))]),
               _: 1
             }),
             _createVNode(_component_VCardText, null, {
               default: _withCtx(() => [
-                _cache[46] || (_cache[46] = _createTextVNode(" 确定要删除供应商「", -1)),
+                _cache[50] || (_cache[50] = _createTextVNode(" 确定要删除供应商「", -1)),
                 _createElementVNode("strong", null, _toDisplayString(deleteProviderName.value), 1),
-                _cache[47] || (_cache[47] = _createTextVNode("」吗？此操作不可撤销。 ", -1))
+                _cache[51] || (_cache[51] = _createTextVNode("」吗？此操作不可撤销。 ", -1))
               ]),
               _: 1
             }),
@@ -3338,9 +3375,9 @@ return (_ctx, _cache) => {
               default: _withCtx(() => [
                 _createVNode(_component_VBtn, {
                   variant: "text",
-                  onClick: _cache[16] || (_cache[16] = $event => (showDeleteProviderConfirm.value = false))
+                  onClick: _cache[18] || (_cache[18] = $event => (showDeleteProviderConfirm.value = false))
                 }, {
-                  default: _withCtx(() => [...(_cache[48] || (_cache[48] = [
+                  default: _withCtx(() => [...(_cache[52] || (_cache[52] = [
                     _createTextVNode("取消", -1)
                   ]))]),
                   _: 1
@@ -3349,7 +3386,7 @@ return (_ctx, _cache) => {
                   color: "error",
                   onClick: confirmDeleteProvider
                 }, {
-                  default: _withCtx(() => [...(_cache[49] || (_cache[49] = [
+                  default: _withCtx(() => [...(_cache[53] || (_cache[53] = [
                     _createTextVNode("删除", -1)
                   ]))]),
                   _: 1
@@ -3368,6 +3405,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const AgentTokensManager = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-7625d539"]]);
+const AgentTokensManager = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-366d83a4"]]);
 
 export { AgentTokensManager as A };

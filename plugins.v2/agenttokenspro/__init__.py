@@ -33,7 +33,7 @@ class AgentTokensPro(_PluginBase):
     plugin_name = "Agent Tokens Pro"
     plugin_desc = "管理多平台 Token 配额，按优先级自动切换 Agent LLM 供应商。"
     plugin_icon = "agentresourceofficer.png"
-    plugin_version = "0.0.8"
+    plugin_version = "0.0.9"
     plugin_author = "apple4105"
     author_url = "https://github.com/apple4105"
     plugin_config_prefix = "agenttokenspro_"
@@ -42,11 +42,13 @@ class AgentTokensPro(_PluginBase):
 
     DATA_KEY_USAGE = "usage"
     DATA_KEY_VENDORS = "vendors"
+    DATA_KEY_TOTAL_OFFSET = "total_offset"
+    DATA_KEY_UNLIMITED_OFFSET = "unlimited_offset"
 
     # 失败自动切换：连续失败次数达到阈值后跳过该供应商。
     DEFAULT_MAX_FAILURES = 3
     # 预检探针超时时间（秒）
-    PREFLIGHT_TIMEOUT = 5
+    PREFLIGHT_TIMEOUT = 15
     # 预检成功缓存有效期（秒），期内跳过重复探针以减少延迟
     PREFLIGHT_CACHE_TTL = 60
     # 供应商故障冷却时间（秒），超过后自动恢复参与选择
@@ -173,6 +175,13 @@ class AgentTokensPro(_PluginBase):
                 "methods": ["POST"],
                 "auth": "bear",
                 "summary": "重置全部供应商用量",
+            },
+            {
+                "path": "/usage/reset_total",
+                "endpoint": self.reset_total_usage_api,
+                "methods": ["POST"],
+                "auth": "bear",
+                "summary": "重置限量总量显示（保留供应商用量记录）",
             },
             {
                 "path": "/vendors",
@@ -673,8 +682,13 @@ class AgentTokensPro(_PluginBase):
             if row["usage"].get("token_limit", 0) <= 0
         ]
         limited_total = sum(row["usage"]["token_limit"] for row in limited_rows)
-        limited_used = sum(row["usage"]["total_tokens"] for row in limited_rows)
-        unlimited_used = sum(row["usage"]["total_tokens"] for row in unlimited_rows)
+        raw_limited_used = sum(row["usage"]["total_tokens"] for row in limited_rows)
+        raw_unlimited_used = sum(row["usage"]["total_tokens"] for row in unlimited_rows)
+        # 总量重置偏移：只影响汇总显示，供应商用量记录保持不变
+        total_offset = self._to_int(self.get_data(self.DATA_KEY_TOTAL_OFFSET), 0)
+        limited_used = max(raw_limited_used - total_offset, 0)
+        unlimited_offset = self._to_int(self.get_data(self.DATA_KEY_UNLIMITED_OFFSET), 0)
+        unlimited_used = max(raw_unlimited_used - unlimited_offset, 0)
         limited_remaining = None if limited_total <= 0 else max(limited_total - limited_used, 0)
         limited_usage_percent = 0
         if limited_total > 0:
@@ -1193,6 +1207,37 @@ class AgentTokensPro(_PluginBase):
         """
         with self._usage_lock:
             self._save_usage({})
+        return schemas.Response(success=True, data=self.get_status().data)
+
+    def reset_total_usage_api(self) -> schemas.Response:
+        """
+        仅重置限量总量显示（圆弧图归零），保留各供应商独立用量记录。
+
+        实现：把当前限量供应商原始用量总和存为偏移快照，
+        _summary() 计算 limited_used 时减去该偏移，下限为 0。
+        """
+        with self._usage_lock:
+            usage = self._load_usage()
+            limited_rows = [
+                provider
+                for provider in getattr(self, "_providers", [])
+                if self._to_int(provider.get("token_limit"), 0) > 0
+            ]
+            unlimited_rows = [
+                provider
+                for provider in getattr(self, "_providers", [])
+                if self._to_int(provider.get("token_limit"), 0) <= 0
+            ]
+            raw_limited_used = sum(
+                self._provider_usage(provider, usage)["total_tokens"]
+                for provider in limited_rows
+            )
+            raw_unlimited_used = sum(
+                self._provider_usage(provider, usage)["total_tokens"]
+                for provider in unlimited_rows
+            )
+            self.save_data(self.DATA_KEY_TOTAL_OFFSET, raw_limited_used)
+            self.save_data(self.DATA_KEY_UNLIMITED_OFFSET, raw_unlimited_used)
         return schemas.Response(success=True, data=self.get_status().data)
 
     # ---- 厂商管理 API ----
@@ -2126,4 +2171,4 @@ class AgentTokensPro(_PluginBase):
         if event.event_data.get("plugin_id") == self.__class__.__name__:
             register_plugin_api(plugin_id=self.__class__.__name__)
 
-# release: AgentTokensPro v0.0.8
+# release: AgentTokensPro v0.0.9

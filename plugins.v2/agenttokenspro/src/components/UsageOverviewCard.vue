@@ -37,15 +37,17 @@ const progressColor = computed(() => {
   <VSheet border rounded class="usage-overview-card">
     <div class="usage-overview-card__content">
       <div class="usage-overview-card__chart">
-        <VProgressCircular
-          :model-value="usagePercent"
-          :color="progressColor"
-          bg-color="surface-variant"
-          :size="132"
-          :width="12"
-        >
-          <div class="usage-overview-card__percent">{{ totalLimit > 0 ? usagePercentText : '不限' }}</div>
-        </VProgressCircular>
+        <div class="usage-overview-card__chart-inner">
+          <VProgressCircular
+            :model-value="usagePercent"
+            :color="progressColor"
+            bg-color="surface-variant"
+            :size="132"
+            :width="12"
+          >
+            <div class="usage-overview-card__percent">{{ totalLimit > 0 ? usagePercentText : '不限' }}</div>
+          </VProgressCircular>
+        </div>
       </div>
 
       <div class="usage-overview-card__body">
@@ -88,6 +90,10 @@ const progressColor = computed(() => {
 .usage-overview-card__chart {
   display: flex;
   justify-content: center;
+}
+
+.usage-overview-card__chart-inner {
+  position: relative;
 }
 
 .usage-overview-card__percent {
