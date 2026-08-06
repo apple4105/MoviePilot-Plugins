@@ -679,8 +679,7 @@ async function queryModels() {
   flex-shrink: 0;
   font-size: 0.875rem;
   color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
-  padding-right: 0;
-  text-align: right;
+  padding-right: 8px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
