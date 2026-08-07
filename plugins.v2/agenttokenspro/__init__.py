@@ -1,4 +1,5 @@
 import asyncio
+import random
 import re
 import threading
 import uuid
@@ -33,7 +34,7 @@ class AgentTokensPro(_PluginBase):
     plugin_name = "Agent Tokens Pro"
     plugin_desc = "管理多平台 Token 配额，按优先级自动切换 Agent LLM 供应商。"
     plugin_icon = "agentresourceofficer.png"
-    plugin_version = "0.0.9"
+    plugin_version = "1.0.0"
     plugin_author = "apple4105"
     author_url = "https://github.com/apple4105"
     plugin_config_prefix = "agenttokenspro_"
@@ -51,17 +52,24 @@ class AgentTokensPro(_PluginBase):
     PREFLIGHT_TIMEOUT = 15
     # 预检成功缓存有效期（秒），期内跳过重复探针以减少延迟
     PREFLIGHT_CACHE_TTL = 60
-    # 供应商故障冷却时间（秒），超过后自动恢复参与选择
+    # 供应商故障冷却回退时间（秒）：仅用于历史数据无 cooldown_until 的场景，正常走指数退避
     COOLDOWN_SECONDS = 900  # 15 分钟
-    # 硬故障 HTTP 状态码：探针或实际请求返回这些码时立即剔除供应商
-    HARD_FAILURE_CODES = {401, 402, 403, 404, 429}
+    # 硬故障 HTTP 状态码：探针或实际请求返回这些码时立即硬禁用供应商
+    # 429 已移出：429 在 _classify_error 中二次分类（配额耗尽→致命，限流→rate_limited 冷却）
+    HARD_FAILURE_CODES = {401, 402, 403, 404}
     # 错误分类常量
-    ERROR_TYPE_FATAL = "fatal"           # 致命错误：立即切换供应商
-    ERROR_TYPE_TRANSIENT = "transient"   # 瞬时错误：退避后重试，达阈值再切换
-    ERROR_TYPE_UNKNOWN = "unknown"       # 未知错误：按瞬时处理
-    # 瞬时错误重试退避参数（秒）
-    TRANSIENT_BACKOFF_BASE = 1.0          # 基础退避
-    TRANSIENT_BACKOFF_MAX = 5.0           # 最大退避
+    ERROR_TYPE_FATAL = "fatal"                 # 致命错误：立即硬禁用并切换供应商
+    ERROR_TYPE_TRANSIENT = "transient"         # 瞬时错误：退避后重试，达阈值再切换
+    ERROR_TYPE_RATE_LIMITED = "rate_limited"   # 限流（429）：首次即进入指数退避冷却，冷却后自动恢复
+    ERROR_TYPE_UNKNOWN = "unknown"             # 未知错误：按瞬时处理
+    # 供应商冷却指数退避参数（秒）：冷却时长 = min(BASE * 2^(n-1), MAX) * uniform(0.5, 1.5)，n = 累计失败次数
+    COOLDOWN_BACKOFF_BASE = 60.0          # 首次冷却约 60 秒
+    COOLDOWN_BACKOFF_FACTOR = 2.0         # 每冷却周期翻倍
+    COOLDOWN_BACKOFF_MAX = 1800.0         # 上限 30 分钟
+    # Agent 重试切换供应商前的退避参数（秒）：同一算法，n = 当前重试轮次
+    RETRY_BACKOFF_BASE = 2.0
+    RETRY_BACKOFF_FACTOR = 2.0
+    RETRY_BACKOFF_MAX = 30.0
     # Agent 执行失败后自动重试次数（切换到其他供应商）
     MAX_RETRIES_DEFAULT = 2
     # Agent 执行失败错误前缀（与 app/agent/__init__.py 保持一致）
@@ -395,6 +403,21 @@ class AgentTokensPro(_PluginBase):
                             await original_dispatch(suppressed[0])
                         break
 
+                    # 限流退避：若最后一次失败被分类为限流（429），
+                    # 先按抖动指数退避等待再切换供应商重试；fatal 错误不等待。
+                    if plugin:
+                        _last_provider_id = getattr(plugin, "_active_provider_id", None)
+                        if _last_provider_id:
+                            _usage_rec = (plugin._load_usage().get(_last_provider_id) or {})
+                            _last_err = _usage_rec.get("last_error") or ""
+                            if plugin._classify_error(_last_err) == plugin.ERROR_TYPE_RATE_LIMITED:
+                                _backoff = plugin._compute_retry_backoff_seconds(attempt)
+                                logger.info(
+                                    f"AgentTokensPro: 检测到限流（供应商 {_last_provider_id}），"
+                                    f"等待 {_backoff:.1f}s 退避后重试"
+                                )
+                                await asyncio.sleep(_backoff)
+
                     logger.info(
                         f"AgentTokensPro: Agent 执行失败，"
                         f"准备第 {attempt + 2}/{total_attempts} 次尝试（切换供应商）"
@@ -641,12 +664,18 @@ class AgentTokensPro(_PluginBase):
         usage = self._load_usage()
         max_failures = getattr(self, "_max_failures", self.DEFAULT_MAX_FAILURES)
         # 检查所有供应商的冷却恢复状态，到期的立即重置数据库
+        # （含限流首次冷却：failure_count 可能低于阈值，但有 cooldown_until/disabled_at）
         for provider in getattr(self, "_providers", []):
             pid = provider.get("id")
             if not pid:
                 continue
             record = usage.get(pid, {})
-            if self._to_int(record.get("failure_count"), 0) >= max_failures:
+            in_cooldown = bool(
+                self._to_int(record.get("failure_count"), 0) >= max_failures
+                or record.get("cooldown_until")
+                or record.get("disabled_at")
+            )
+            if in_cooldown:
                 self._check_cooldown_recovery(pid, usage)
         rows = []
         for provider in getattr(self, "_providers", []):
@@ -672,6 +701,8 @@ class AgentTokensPro(_PluginBase):
             and row.get("model")
             and row.get("base_url")
             and row["usage"].get("failure_count", 0) < max_failures
+            and not row["usage"].get("cooldown_until")
+            and not row["usage"].get("disabled_at")
         ]
         limited_rows = [
             row for row in rows
@@ -771,7 +802,12 @@ class AgentTokensPro(_PluginBase):
                 msg += f"（{detail}）"
             error_type = self._classify_error(msg)
             hard = (error_type == self.ERROR_TYPE_FATAL)
-            self._mark_provider_faulty(provider_id, msg, hard_failure=hard)
+            self._mark_provider_faulty(
+                provider_id,
+                msg,
+                hard_failure=hard,
+                immediate_cooldown=(error_type == self.ERROR_TYPE_RATE_LIMITED),
+            )
             return False
 
         # 3xx 等异常状态码：保守视为不可用
@@ -835,29 +871,53 @@ class AgentTokensPro(_PluginBase):
                 self._preflight_cache.pop(provider_id, None)
             return True
 
-        elapsed = (datetime.now() - disabled_time).total_seconds()
-        if elapsed >= self.COOLDOWN_SECONDS:
-            with self._usage_lock:
-                # 重新加载以防其他线程已修改
-                usage_latest = self._load_usage()
-                rec = usage_latest.get(provider_id, {})
-                rec["failure_count"] = 0
-                rec["last_error"] = None
-                rec.pop("disabled_at", None)
-                rec.pop("cooldown_until", None)
-                usage_latest[provider_id] = rec
-                self._save_usage(usage_latest)
-                # 同步更新传入的 usage dict
-                usage[provider_id] = rec
-            # 清除预检缓存，强制下次重新探针
-            with self._preflight_cache_lock:
-                self._preflight_cache.pop(provider_id, None)
-            logger.info(
-                f"Agent Tokens 供应商 [{provider_id}] 冷却期已过（{elapsed:.0f}秒），"
-                f"自动恢复，重置失败计数"
-            )
-            return True
-        return False
+        # 优先按 cooldown_until（指数退避结果）判断冷却是否结束；缺失时回退固定时长
+        cooldown_until = record.get("cooldown_until")
+        if cooldown_until:
+            try:
+                cooldown_dt = datetime.strptime(cooldown_until, "%Y-%m-%d %H:%M:%S")
+            except (ValueError, TypeError):
+                cooldown_dt = None
+            if cooldown_dt:
+                elapsed = (datetime.now() - disabled_time).total_seconds()
+                if datetime.now() < cooldown_dt:
+                    logger.debug(
+                        f"Agent Tokens 供应商 [{provider_id}] 仍在冷却中，"
+                        f"剩余 {int((cooldown_dt - datetime.now()).total_seconds())} 秒"
+                    )
+                    return False
+            else:
+                # cooldown_until 格式异常：回退到固定时长判断
+                elapsed = (datetime.now() - disabled_time).total_seconds()
+                if elapsed < self.COOLDOWN_SECONDS:
+                    return False
+        else:
+            # 历史数据无 cooldown_until：回退到固定时长判断
+            elapsed = (datetime.now() - disabled_time).total_seconds()
+            if elapsed < self.COOLDOWN_SECONDS:
+                return False
+
+        # 冷却期已过 → 恢复
+        with self._usage_lock:
+            # 重新加载以防其他线程已修改
+            usage_latest = self._load_usage()
+            rec = usage_latest.get(provider_id, {})
+            rec["failure_count"] = 0
+            rec["last_error"] = None
+            rec.pop("disabled_at", None)
+            rec.pop("cooldown_until", None)
+            usage_latest[provider_id] = rec
+            self._save_usage(usage_latest)
+            # 同步更新传入的 usage dict
+            usage[provider_id] = rec
+        # 清除预检缓存，强制下次重新探针
+        with self._preflight_cache_lock:
+            self._preflight_cache.pop(provider_id, None)
+        logger.info(
+            f"Agent Tokens 供应商 [{provider_id}] 冷却期已过，"
+            f"自动恢复，重置失败计数"
+        )
+        return True
 
     def _select_provider(
         self,
@@ -900,15 +960,16 @@ class AgentTokensPro(_PluginBase):
             provider_usage = self._provider_usage(provider, usage)
             if provider_usage["exhausted"]:
                 continue
-            # 硬禁用供应商（401/402/403/404/429 致命错误）不自动恢复，直接跳过
+            # 硬禁用供应商（401/402/403/404 致命错误）不自动恢复，直接跳过
             if provider_usage.get("hard_disabled"):
                 logger.debug(
                     f"Agent Tokens 跳过供应商 [{provider.get('name')}]：硬禁用中"
                 )
                 continue
-            # 连续失败次数达到阈值时检查冷却恢复
+            # 连续失败次数达到阈值、或处于冷却（限流首次即进入冷却）时检查恢复
             failure_count = provider_usage.get("failure_count", 0)
-            if failure_count >= max_failures:
+            in_cooldown = bool(provider_usage.get("cooldown_until") or provider_usage.get("disabled_at"))
+            if failure_count >= max_failures or in_cooldown:
                 if self._check_cooldown_recovery(provider.get("id"), usage):
                     logger.info(f"Agent Tokens 供应商 [{provider.get('name')}] 冷却恢复，开始预检")
                 else:
@@ -982,6 +1043,8 @@ class AgentTokensPro(_PluginBase):
                 "providers": self._provider_status_rows(),
                 "summary": self._summary(),
                 "active_provider_id": display_id,
+                "enabled": self.get_state(),
+                "version": self.plugin_version,
             },
         )
 
@@ -1431,14 +1494,18 @@ class AgentTokensPro(_PluginBase):
         """
         错误分类器：将错误文本分类为致命错误或瞬时错误。
 
-        致命错误 (fatal)：HTTP 401/402/403/404/429 — 鉴权失败、欠费、
-        无权限、接口不存在、频率限制。供应商本身有问题，重试无意义，
-        应立即切换到其他供应商。
+        致命错误 (fatal)：HTTP 401/402/403/404 — 鉴权失败、欠费、无权限、
+        接口不存在；以及 429 但错误文本含配额/余额/欠费关键词（配额耗尽）。
+        供应商本身有问题，重试无意义，应立即硬禁用并切换。
+
+        限流错误 (rate_limited)：HTTP 429 限流（rate limit / too many
+        requests 等关键词），文本无法判断时也按限流处理。供应商本身正常，
+        首次即进入指数退避冷却，冷却后自动恢复。
 
         瞬时错误 (transient)：HTTP 5xx、超时、网络异常。可能是临时
         故障，退避后重试可能恢复。
 
-        返回 ERROR_TYPE_FATAL / ERROR_TYPE_TRANSIENT / ERROR_TYPE_UNKNOWN
+        返回 ERROR_TYPE_FATAL / ERROR_TYPE_RATE_LIMITED / ERROR_TYPE_TRANSIENT / ERROR_TYPE_UNKNOWN
         """
         if not error_text:
             return cls.ERROR_TYPE_UNKNOWN
@@ -1472,14 +1539,41 @@ class AgentTokensPro(_PluginBase):
                 return cls.ERROR_TYPE_TRANSIENT
         return cls.ERROR_TYPE_UNKNOWN
 
-    def _compute_cooldown_until(self, disabled_at_str: str) -> Optional[str]:
-        """根据 disabled_at 计算冷却结束时间字符串。"""
+    def _compute_cooldown_until(self, disabled_at_str: str, failure_count: int = 1) -> Optional[str]:
+        """
+        根据 disabled_at 与失败次数计算冷却结束时间字符串。
+
+        冷却时长采用带抖动的指数退避：
+        min(COOLDOWN_BACKOFF_BASE * 2^(n-1), COOLDOWN_BACKOFF_MAX) * uniform(0.5, 1.5)
+        n = 累计失败次数（最小 1）。
+        """
         try:
             disabled_time = datetime.strptime(disabled_at_str, "%Y-%m-%d %H:%M:%S")
-            cooldown_until_dt = disabled_time + timedelta(seconds=self.COOLDOWN_SECONDS)
-            return cooldown_until_dt.strftime("%Y-%m-%d %H:%M:%S")
         except (ValueError, TypeError):
             return None
+        n = max(self._to_int(failure_count, 0), 1)
+        backoff = min(
+            self.COOLDOWN_BACKOFF_BASE * (self.COOLDOWN_BACKOFF_FACTOR ** (n - 1)),
+            self.COOLDOWN_BACKOFF_MAX,
+        )
+        # 抖动 ±50%，避免多个供应商同时冷却恢复造成请求惊群
+        backoff *= random.uniform(0.5, 1.5)
+        cooldown_until_dt = disabled_time + timedelta(seconds=backoff)
+        return cooldown_until_dt.strftime("%Y-%m-%d %H:%M:%S")
+
+    def _compute_retry_backoff_seconds(self, attempt_index: int) -> float:
+        """
+        计算 Agent 重试切换供应商前的退避等待时长（秒）。
+
+        与冷却退避同一算法：min(BASE * 2^(n-1), MAX) * uniform(0.5, 1.5)，
+        仅使用不同的基础/上限参数，n = 当前重试轮次。
+        """
+        n = max(self._to_int(attempt_index, 0), 1)
+        backoff = min(
+            self.RETRY_BACKOFF_BASE * (self.RETRY_BACKOFF_FACTOR ** (n - 1)),
+            self.RETRY_BACKOFF_MAX,
+        )
+        return backoff * random.uniform(0.5, 1.5)
 
     def _provider_status(self, provider: dict, provider_usage: dict) -> str:
         """
@@ -1497,20 +1591,29 @@ class AgentTokensPro(_PluginBase):
             return "hard_disabled"
         max_failures = getattr(self, "_max_failures", self.DEFAULT_MAX_FAILURES)
         failure_count = self._to_int(provider_usage.get("failure_count"), 0)
-        if failure_count >= max_failures:
-            disabled_at = provider_usage.get("disabled_at")
-            if disabled_at:
-                try:
-                    disabled_time = datetime.strptime(disabled_at, "%Y-%m-%d %H:%M:%S")
-                    if (datetime.now() - disabled_time).total_seconds() < self.COOLDOWN_SECONDS:
-                        return "cooldown"
-                except (ValueError, TypeError):
-                    pass  # 格式异常，视为可恢复
-            # failure_count 达阈值但冷却已过或无 disabled_at → active（_check_cooldown_recovery 会重置）
-            return "active"
+        disabled_at = provider_usage.get("disabled_at")
+        cooldown_until = provider_usage.get("cooldown_until")
+        # 优先按指数退避冷却结束时间判断（限流首次冷却 failure_count 可能低于阈值）
+        if cooldown_until:
+            try:
+                cooldown_dt = datetime.strptime(cooldown_until, "%Y-%m-%d %H:%M:%S")
+                if datetime.now() < cooldown_dt:
+                    return "cooldown"
+            except (ValueError, TypeError):
+                pass  # 格式异常，回退固定时长判断
+        # 兼容历史数据（无 cooldown_until）：固定冷却时长
+        if disabled_at and failure_count >= max_failures:
+            try:
+                disabled_time = datetime.strptime(disabled_at, "%Y-%m-%d %H:%M:%S")
+                if (datetime.now() - disabled_time).total_seconds() < self.COOLDOWN_SECONDS:
+                    return "cooldown"
+            except (ValueError, TypeError):
+                pass  # 格式异常，视为可恢复
+        # 冷却已过或无冷却标记 → active（_check_cooldown_recovery 会重置状态）
+        return "active"
         return "active"
 
-    def _mark_provider_faulty(self, provider_id: str, error_message: str, hard_failure: bool = False) -> None:
+    def _mark_provider_faulty(self, provider_id: str, error_message: str, hard_failure: bool = False, immediate_cooldown: bool = False) -> None:
         """
         将指定供应商标记为故障。
 
@@ -1519,6 +1622,8 @@ class AgentTokensPro(_PluginBase):
         - hard_failure=True：直接将 failure_count 设为 max_failures 阈值，
           使该供应商立即被跳过。同时设置 disabled_at 进入冷却。
           用于测试连通性返回 HTTP >= 400 等硬故障场景。
+        - immediate_cooldown=True：限流（429/rate_limited）场景，不硬禁用，
+          首次失败即进入指数退避冷却（_compute_cooldown_until），冷却后自动恢复。
         """
         if not provider_id:
             return
@@ -1541,12 +1646,23 @@ class AgentTokensPro(_PluginBase):
                     f"failure_count 直接设为 {max_failures}，硬禁用（不自动恢复）："
                     f"{error_message[:200] if error_message else ''}"
                 )
+            elif immediate_cooldown:
+                # 限流（429）：不硬禁用，首次即进入指数退避冷却，冷却后自动恢复
+                record["failure_count"] = record.get("failure_count", 0) + 1
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                record["disabled_at"] = now_str
+                record["cooldown_until"] = self._compute_cooldown_until(now_str, record["failure_count"])
+                logger.warning(
+                    f"Agent Tokens 供应商 [{provider_id}] 触发限流冷却"
+                    f"（第 {record['failure_count']} 次失败），直接进入指数退避冷却："
+                    f"{error_message[:200] if error_message else ''}"
+                )
             else:
                 record["failure_count"] = record.get("failure_count", 0) + 1
                 if record["failure_count"] >= max_failures:
                     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     record["disabled_at"] = now_str
-                    record["cooldown_until"] = self._compute_cooldown_until(now_str)
+                    record["cooldown_until"] = self._compute_cooldown_until(now_str, record["failure_count"])
                     logger.warning(
                         f"Agent Tokens 供应商 [{provider_id}] 连续失败 {record['failure_count']} 次，"
                         f"达到阈值 {max_failures}，进入冷却"
@@ -1632,19 +1748,30 @@ class AgentTokensPro(_PluginBase):
             """
             标记供应商标记为故障并返回失败响应。
             hard=None 时自动根据 _classify_error 判断错误类型：
-              - ERROR_TYPE_FATAL → hard=True（立即跳过 + 冷却）
+              - ERROR_TYPE_FATAL → hard=True（立即跳过 + 硬禁用，不自动恢复）
+              - ERROR_TYPE_RATE_LIMITED → immediate_cooldown=True（首次即进入指数退避冷却）
               - ERROR_TYPE_TRANSIENT / UNKNOWN → hard=False（递增计数）
             若该供应商是当前活跃节点，踢出并触发切换。
             若切换时无其他可用供应商，捕获 NoAvailableProviderError，
             仍返回失败响应（不中断 API 调用）。
             """
             # 自动分类错误类型
+            error_type = None
             if hard is None:
                 error_type = self._classify_error(msg)
                 hard = (error_type == self.ERROR_TYPE_FATAL)
             logger.warning(f"AgentTokens test_connection_api FAIL | provider_id={provider_id} msg={msg} hard={hard}")
             if provider_id:
-                self._mark_provider_faulty(provider_id, msg, hard_failure=hard)
+                immediate_cooldown = (
+                    error_type is not None
+                    and error_type == self.ERROR_TYPE_RATE_LIMITED
+                )
+                self._mark_provider_faulty(
+                    provider_id,
+                    msg,
+                    hard_failure=bool(hard),
+                    immediate_cooldown=immediate_cooldown,
+                )
                 # 如果故障供应商是当前活跃节点，踢出并触发切换
                 try:
                     self._kick_active_provider_if_faulty(provider_id)
@@ -1876,12 +2003,14 @@ class AgentTokensPro(_PluginBase):
         provider_usage = self._provider_usage(provider, usage)
         if provider_usage["exhausted"]:
             return False
-        # 硬禁用供应商（401/402/403/404/429 致命错误）不自动恢复，只能手动重置
+        # 硬禁用供应商（401/402/403/404 致命错误）不自动恢复，只能手动重置
         if provider_usage.get("hard_disabled"):
             return False
         max_failures = getattr(self, "_max_failures", self.DEFAULT_MAX_FAILURES)
-        if provider_usage.get("failure_count", 0) >= max_failures:
-            # 检查冷却恢复
+        failure_count = provider_usage.get("failure_count", 0)
+        in_cooldown = bool(provider_usage.get("cooldown_until") or provider_usage.get("disabled_at"))
+        if failure_count >= max_failures or in_cooldown:
+            # 检查冷却恢复（限流首次进入冷却时 failure_count 可能未达阈值）
             if not self._check_cooldown_recovery(provider.get("id"), usage):
                 return False
         return True
@@ -2113,7 +2242,8 @@ class AgentTokensPro(_PluginBase):
                     # 用户主动取消/中断任务，不增加失败计数，不触发供应商切换
                     logger.info(f"Agent Tokens 供应商 [{provider_name}] 调用被用户取消，不计入故障")
                 elif error_type == self.ERROR_TYPE_FATAL:
-                    # 致命错误（401/402/403/404/429）：立即跳过 + 硬禁用（不自动恢复）
+                    # 致命错误（401/402/403/404 及额度/余额用尽的 429）：
+                    # 立即跳过 + 硬禁用（不自动恢复）
                     record["failure_count"] = max_failures
                     record["hard_disabled"] = True
                     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -2124,6 +2254,21 @@ class AgentTokensPro(_PluginBase):
                         f"Agent Tokens 供应商 [{provider_name}] 致命错误（{error_text}），"
                         f"立即跳过并硬禁用（不自动恢复）"
                     )
+                elif error_type == self.ERROR_TYPE_RATE_LIMITED:
+                    # 限流错误（429）：首次即进入抖动指数退避冷却，不硬禁用；
+                    # 冷却时长随失败计数增长，达到阈值后由冷却恢复逻辑自动放行
+                    record["failure_count"] = self._to_int(record.get("failure_count"), 0) + 1
+                    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    record["disabled_at"] = now_str
+                    record["cooldown_until"] = self._compute_cooldown_until(
+                        now_str, record["failure_count"]
+                    )
+                    record["last_error"] = error_text
+                    logger.warning(
+                        f"Agent Tokens 供应商 [{provider_name}] 触发限流（{error_text}），"
+                        f"进入退避冷却至 {record['cooldown_until']}"
+                        f"（失败计数 {record['failure_count']}）"
+                    )
                 else:
                     # 瞬时错误或未知错误：递增计数，达到阈值进入冷却
                     record["failure_count"] = self._to_int(record.get("failure_count"), 0) + 1
@@ -2131,7 +2276,9 @@ class AgentTokensPro(_PluginBase):
                     if record["failure_count"] >= max_failures:
                         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         record["disabled_at"] = now_str
-                        record["cooldown_until"] = self._compute_cooldown_until(now_str)
+                        record["cooldown_until"] = self._compute_cooldown_until(
+                            now_str, record["failure_count"]
+                        )
                         logger.warning(
                             f"Agent Tokens 供应商 [{provider_name}] 连续失败 {record['failure_count']} 次，"
                             f"达到阈值 {max_failures}，进入冷却"
