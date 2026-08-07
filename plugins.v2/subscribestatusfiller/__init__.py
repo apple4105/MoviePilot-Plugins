@@ -29,7 +29,7 @@ class SubscribeStatusFiller(_PluginBase):
     # 插件描述
     plugin_desc = "根据剧集播出状态自动调整订阅策略：已完结剧下完整剧集包，连载剧只追已播集数"
     # 插件版本
-    plugin_version = "1.1"
+    plugin_version = "1.2"
     # 插件作者
     plugin_author = "apple4105"
     # 作者主页
@@ -329,11 +329,17 @@ class SubscribeStatusFiller(_PluginBase):
         # 写入状态到 note
         note["tmdb_status"] = status
 
-        # 根据状态联动下载策略
+        # 根据状态联动下载策略（尊重配置开关）
         if status in ("Ended", "Canceled"):
-            self._apply_ended_strategy(subscribe, note)
+            if self._ended_best_version:
+                self._apply_ended_strategy(subscribe, note)
+            else:
+                note["strategy_applied"] = False
         elif status in ("Returning Series", "In Production", "Pilot"):
-            self._apply_returning_strategy(subscribe, note)
+            if self._returning_lock_aired:
+                self._apply_returning_strategy(subscribe, note)
+            else:
+                note["strategy_applied"] = False
         else:
             # 其他状态（如 Planned 等），只写状态不做策略联动
             note["strategy_applied"] = False
@@ -364,7 +370,7 @@ class SubscribeStatusFiller(_PluginBase):
         event_data.cancel = True
         event_data.source = "SubscribeStatusFiller"
         event_data.reason = "剧集连载中，继续追更"
-        logger.info(f"订阅 {subscribe.name} 完成被否决（连载中），继续追更")
+        logger.debug(f"订阅 {subscribe.name} 完成被否决（连载中），继续追更")
 
     @eventmanager.register(EventType.PluginAction)
     def action_event_handler(self, event: Event):
@@ -423,6 +429,10 @@ class SubscribeStatusFiller(_PluginBase):
             if aired > current_total:
                 lack = sub.lack_episode or 0
                 downloaded = max(0, current_total - lack)
+                # 起始集数下限保护：已下载数不能低于起始集数-1（与策略应用逻辑一致）
+                start_ep = self._get_start_episode(sub.id)
+                if start_ep and start_ep > 1:
+                    downloaded = max(downloaded, start_ep - 1)
                 new_lack = max(0, aired - downloaded)
                 self.subscribe_oper.update(sub.id, {
                     "total_episode": aired,
@@ -492,10 +502,9 @@ class SubscribeStatusFiller(_PluginBase):
             "manual_total_episode": 1,
         }
 
-        # 应用起始集数（优先使用按订阅覆盖的值，否则默认 1）
-        start_ep = self._get_start_episode(subscribe.id)
-        if start_ep and start_ep > 1:
-            updates["start_episode"] = start_ep
+        # 应用起始集数（优先使用按订阅覆盖的值，否则默认 1；始终写回以清除旧残留值）
+        start_ep = self._get_start_episode(subscribe.id) or 1
+        updates["start_episode"] = start_ep
 
         # 查询已播集数，锁定 total_episode
         aired = self._get_aired_count(subscribe.tmdbid, subscribe.season)
@@ -548,6 +557,30 @@ class SubscribeStatusFiller(_PluginBase):
             logger.warning(f"查询排期总集数失败 tmdbid={tmdb_id} season={season}：{e}")
             return None
 
+    def _get_cached_scheduled_count(self, subscribe: Subscribe) -> Optional[int]:
+        """
+        获取排期总集数：优先读 note 缓存（当日有效），过期或缺失时查询 TMDB 并回写缓存，
+        避免列表接口每次对每个订阅发起 TMDB 请求
+        """
+        if not subscribe.tmdbid or subscribe.season is None:
+            return None
+        note = self._parse_note(subscribe.note)
+        cached = note.get("scheduled_count")
+        cached_at = note.get("scheduled_count_at")
+        if isinstance(cached, int) and cached > 0 and cached_at:
+            try:
+                cache_date = datetime.strptime(str(cached_at), "%Y-%m-%d").date()
+                if (date.today() - cache_date).days < 1:
+                    return cached
+            except ValueError:
+                pass
+        count = self._get_scheduled_count(subscribe.tmdbid, subscribe.season)
+        if count:
+            note["scheduled_count"] = count
+            note["scheduled_count_at"] = date.today().isoformat()
+            self._save_note(subscribe, note)
+        return count
+
     def _get_start_episode(self, subscribe_id: int) -> int:
         """
         获取订阅生效的起始集数（优先按订阅覆盖值，默认 1）
@@ -597,7 +630,7 @@ class SubscribeStatusFiller(_PluginBase):
                 "name": sub.name or "",
                 "season": sub.season,
                 "status": status,
-                "total_episodes": self._get_scheduled_count(sub.tmdbid, sub.season),
+                "total_episodes": self._get_cached_scheduled_count(sub),
                 "total_episode": total,
                 "lack_episode": lack,
                 # 连载剧已锁定 total_episode 为已播集数，起始集数上限取 total+1
@@ -630,6 +663,8 @@ class SubscribeStatusFiller(_PluginBase):
         try:
             data = await request.json()
         except Exception:
+            return {"success": False, "message": "请求数据解析失败"}
+        if not isinstance(data, dict):
             return {"success": False, "message": "请求数据解析失败"}
 
         try:
@@ -737,22 +772,20 @@ class SubscribeStatusFiller(_PluginBase):
 
             note["tmdb_status"] = status
 
-            # 应用策略
+            # 应用策略（无论策略开关是否启用，状态都要写入 note 并持久化）
             if status in ("Ended", "Canceled"):
                 if self._ended_best_version:
                     self._apply_ended_strategy(subscribe, note)
                 else:
                     note["strategy_applied"] = False
-                    self._save_note(subscribe, note)
             elif status in ("Returning Series", "In Production", "Pilot"):
                 if self._returning_lock_aired:
                     self._apply_returning_strategy(subscribe, note)
                 else:
                     note["strategy_applied"] = False
-                    self._save_note(subscribe, note)
             else:
                 note["strategy_applied"] = False
-                self._save_note(subscribe, note)
+            self._save_note(subscribe, note)
 
             filled += 1
             logger.info(f"存量补全：订阅 {subscribe.name}（{subscribe.id}）状态：{status}")

@@ -243,6 +243,13 @@ onMounted(() => {
   max-width: 110px;
   margin: 0 auto;
 }
+.ssf-select :deep(.v-field__input) {
+  justify-content: center;
+  text-align: center;
+}
+.ssf-select :deep(.v-select__selection) {
+  text-align: center;
+}
 .ssf-table :deep(table) {
   min-width: 760px;
 }

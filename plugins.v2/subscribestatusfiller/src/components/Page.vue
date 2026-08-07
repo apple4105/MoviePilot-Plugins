@@ -16,7 +16,7 @@ defineProps({
     default: false,
   },
 })
-const emit = defineEmits(['action', 'switch'])
+const emit = defineEmits(['action', 'switch', 'close'])
 
 const pageRef = ref(null)
 
@@ -36,6 +36,7 @@ function handleSettings() {
       <VSpacer />
       <VBtn icon="mdi-refresh" variant="text" :loading="pageRef?.loading" @click="handleRefresh" />
       <VBtn icon="mdi-cog-outline" variant="text" @click="handleSettings" />
+      <VBtn icon="mdi-close" variant="text" @click="emit('close')" />
     </VToolbar>
     <VDivider />
 

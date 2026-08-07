@@ -1,6 +1,6 @@
 {
   "name": "SubscribeStatusFiller",
-  "version": "1.1",
+  "version": "1.2",
   "description": "根据剧集播出状态自动调整订阅策略：已完结剧下完整剧集包，连载剧只追已播集数",
   "icon": "mdi-television-classic",
   "author": "apple4105",
@@ -19,7 +19,7 @@
   "plugin": {
     "id": "SubscribeStatusFiller",
     "name": "剧集订阅增强",
-    "version": "1.1",
+    "version": "1.2",
     "description": "根据剧集播出状态自动调整订阅策略：已完结剧下完整剧集包，连载剧只追已播集数",
     "author": "apple4105",
     "icon": "mdi-television-classic",
